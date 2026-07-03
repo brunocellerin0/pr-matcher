@@ -774,12 +774,6 @@ st.write(
     "Version 3.0: Financial and strategic matching. The app now scores EBITDA, revenue, "
     "ticket size, sector fit, and qualitative characteristics, then shows where each fund matches or does not match."
 )
-st.info(
-    "Ticket = the typical amount of capital a PE fund invests in one deal. "
-    "To score ticket fit, your opportunities file should include a column such as ticket, ticket_size, equity_needed, deal_size, enterprise_value, or valuation."
-)
-
-
 pe_funds = load_csv("pe_funds_database.csv")
 portfolio_companies = load_csv("portfolio_companies.csv")
 opportunities = load_csv("opportunities.csv")
@@ -865,16 +859,9 @@ st.sidebar.write(f"PE Funds: {len(pe_funds)}")
 st.sidebar.write(f"Portfolio Companies: {len(portfolio_companies)}")
 st.sidebar.write(f"Opportunities: {len(opportunities)}")
 
-if not website_enrichment.empty:
-    st.sidebar.write(f"Website Enrichment: {len(website_enrichment)}")
-else:
-    st.sidebar.warning("No website enrichment file found.")
-
-
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2 = st.tabs([
     "Opportunity → PE Funds",
-    "PE Fund → Opportunities",
-    "Website Enrichment"
+    "PE Fund → Opportunities"
 ])
 
 
@@ -933,17 +920,6 @@ with tab1:
 
     st.write("**Detected Sector Category**")
     st.write(format_categories(detected_opp_categories) if detected_opp_categories else "No clear category detected.")
-
-    opportunity_website_text = get_enrichment_text(
-        website_enrichment,
-        enrichment_columns,
-        selected_opportunity_name,
-        source_type="Opportunity"
-    )
-
-    if opportunity_website_text:
-        with st.expander("Website / Source Keywords for This Opportunity"):
-            st.write(opportunity_website_text[:1500])
 
     if st.button("Find Best PE Matches", key="find_pe_matches"):
         results = []
@@ -1038,17 +1014,6 @@ with tab2:
         st.write("Revenue:", format_range(get_number(selected_fund, columns["fund_revenue_min"]), get_number(selected_fund, columns["fund_revenue_max"])))
         st.write("Ticket:", format_range(get_number(selected_fund, columns["fund_ticket_min"]), get_number(selected_fund, columns["fund_ticket_max"])))
 
-    fund_website_text = get_enrichment_text(
-        website_enrichment,
-        enrichment_columns,
-        selected_fund_name,
-        source_type="PE Fund"
-    )
-
-    if fund_website_text:
-        with st.expander("Website Keywords for This PE Fund"):
-            st.write(fund_website_text[:1500])
-
     if columns["portfolio_fund"] and columns["portfolio_company"]:
         related_portfolio = portfolio_companies[
             portfolio_companies[columns["portfolio_fund"]].astype(str).str.lower().str.strip()
@@ -1109,16 +1074,3 @@ with tab2:
             st.dataframe(results_df, use_container_width=True)
 
 
-# -----------------------------
-# Tab 3: Website enrichment data
-# -----------------------------
-
-with tab3:
-    st.header("Website Enrichment Data")
-
-    if website_enrichment.empty:
-        st.warning("No website enrichment data found. Run enrich_websites.py first.")
-    else:
-        st.write("This data was generated from the public links already present in your CSV files.")
-        st.dataframe(website_enrichment, use_container_width=True)
-        
