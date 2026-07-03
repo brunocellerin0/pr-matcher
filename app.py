@@ -1,5 +1,9 @@
 import re
 import unicodedata
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import pandas as pd
@@ -763,6 +767,203 @@ def score_match(opportunity, fund, portfolio_companies, enrichment, columns, enr
     }
 
 
+
+# -----------------------------
+# News search helpers
+# -----------------------------
+
+NEWS_SIGNAL_KEYWORDS = {
+    "Acquisition / completed deal": [
+        "acquires", "acquired", "acquisition", "buyout", "takes stake", "stake in",
+        "compra", "adquiere", "adquisicion", "adquisición", "participacion", "participación",
+        "majority stake", "minority stake", "investment in", "invierte en"
+    ],
+    "Sale process / investor wanted": [
+        "seeks investor", "seeking investor", "searches for investor", "looking for investor",
+        "busca inversor", "busca socio", "busca comprador", "proceso de venta",
+        "sale process", "for sale", "explores sale", "explora venta", "sell stake",
+        "venta de", "poner a la venta", "mandato de venta"
+    ],
+    "Advisor / mandate signal": [
+        "hires adviser", "hires advisor", "appoints adviser", "appoints advisor",
+        "contrata asesor", "contrata a", "mandates", "mandata", "mandato",
+        "lazard", "rothschild", "alantra", "az capital", "kpmg", "pwc", "deloitte", "ey"
+    ],
+    "PE fund activity": [
+        "private equity", "pe fund", "fondo de private equity", "capital privado",
+        "raises fund", "closes fund", "fundraising", "levanta fondo", "cierra fondo",
+        "new fund", "nuevo fondo"
+    ],
+    "Strategic growth signal": [
+        "expansion", "expands", "growth plan", "strategic plan", "raises debt",
+        "refinancing", "international expansion", "crecimiento", "expansion", "expansión",
+        "plan estrategico", "plan estratégico", "refinanciacion", "refinanciación"
+    ],
+}
+
+DEFAULT_NEWS_QUERY_GROUPS = {
+    "Spain M&A / PE general": [
+        'Spain private equity acquisition when:{days}d',
+        'Spain M&A acquisition private equity when:{days}d',
+        'España capital privado adquisición when:{days}d',
+        'España fusiones adquisiciones private equity when:{days}d',
+        'España proceso de venta empresa when:{days}d',
+        'España busca inversor empresa when:{days}d',
+        'España contrata asesor venta empresa when:{days}d',
+    ],
+    "Restaurants / Hospitality": [
+        'Spain restaurant acquisition private equity when:{days}d',
+        'Spain hospitality acquisition private equity when:{days}d',
+        'España restaurantes adquisición capital privado when:{days}d',
+        'España hostelería busca inversor when:{days}d',
+        'España restaurantes proceso de venta when:{days}d',
+        'España cafeterías adquisición inversión when:{days}d',
+    ],
+    "Food & Beverage / Consumer": [
+        'Spain food beverage acquisition private equity when:{days}d',
+        'España alimentación adquisición capital privado when:{days}d',
+        'España bebidas adquisición inversión when:{days}d',
+        'España gran consumo busca inversor when:{days}d',
+        'España empresa alimentación proceso de venta when:{days}d',
+    ],
+    "Investor wanted / sale signals": [
+        '"busca inversor" empresa España when:{days}d',
+        '"busca socio" empresa España inversión when:{days}d',
+        '"proceso de venta" empresa España when:{days}d',
+        '"explora venta" empresa España when:{days}d',
+        '"contrata asesor" venta empresa España when:{days}d',
+        '"seeking investor" company Spain when:{days}d',
+        '"sale process" company Spain private equity when:{days}d',
+    ],
+    "Advisors / deal mandates": [
+        'Alantra venta empresa España when:{days}d',
+        'Lazard venta empresa España when:{days}d',
+        'Rothschild venta empresa España when:{days}d',
+        'KPMG corporate finance venta empresa España when:{days}d',
+        'Deloitte corporate finance venta empresa España when:{days}d',
+        'AZ Capital venta empresa España when:{days}d',
+    ],
+}
+
+
+def classify_news_signal(title, summary=""):
+    text = normalize_text(f"{title} {summary}")
+
+    matches = []
+    for signal, keywords in NEWS_SIGNAL_KEYWORDS.items():
+        for keyword in keywords:
+            if contains_term(text, keyword):
+                matches.append(signal)
+                break
+
+    if matches:
+        return "; ".join(matches[:2])
+
+    return "Other / review manually"
+
+
+def clean_google_news_title(title):
+    title = str(title or "").strip()
+    if " - " in title:
+        return title.rsplit(" - ", 1)[0].strip()
+    return title
+
+
+def parse_news_date(date_text):
+    if not date_text:
+        return ""
+    try:
+        return parsedate_to_datetime(date_text).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return str(date_text)
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_google_news(query, hl="es-ES", gl="ES", ceid="ES:es", max_results=20):
+    encoded_query = urllib.parse.quote_plus(query)
+    url = f"https://news.google.com/rss/search?q={encoded_query}&hl={hl}&gl={gl}&ceid={ceid}"
+
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0"}
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=12) as response:
+            xml_data = response.read()
+    except Exception as exc:
+        return pd.DataFrame([{
+            "Search Query": query,
+            "Signal Type": "Search error",
+            "Title": f"Could not load news feed: {exc}",
+            "Source": "",
+            "Published": "",
+            "Link": "",
+            "Summary": "",
+        }])
+
+    try:
+        root = ET.fromstring(xml_data)
+    except ET.ParseError as exc:
+        return pd.DataFrame([{
+            "Search Query": query,
+            "Signal Type": "Parse error",
+            "Title": f"Could not parse news feed: {exc}",
+            "Source": "",
+            "Published": "",
+            "Link": "",
+            "Summary": "",
+        }])
+
+    rows = []
+    for item in root.findall(".//item")[:max_results]:
+        raw_title = item.findtext("title", default="")
+        title = clean_google_news_title(raw_title)
+        link = item.findtext("link", default="")
+        published = parse_news_date(item.findtext("pubDate", default=""))
+        summary = item.findtext("description", default="")
+
+        source = ""
+        source_node = item.find("source")
+        if source_node is not None and source_node.text:
+            source = source_node.text.strip()
+        elif " - " in raw_title:
+            source = raw_title.rsplit(" - ", 1)[-1].strip()
+
+        rows.append({
+            "Search Query": query,
+            "Signal Type": classify_news_signal(title, summary),
+            "Title": title,
+            "Source": source,
+            "Published": published,
+            "Link": link,
+            "Summary": summary,
+        })
+
+    return pd.DataFrame(rows)
+
+
+def search_multiple_news_queries(queries, hl, gl, ceid, max_results_per_query):
+    frames = []
+
+    for query in queries:
+        query = str(query).strip()
+        if not query:
+            continue
+        frames.append(fetch_google_news(query, hl, gl, ceid, max_results_per_query))
+
+    if not frames:
+        return pd.DataFrame()
+
+    results = pd.concat(frames, ignore_index=True)
+
+    if "Link" in results.columns:
+        results = results.drop_duplicates(subset=["Link"], keep="first")
+    if "Title" in results.columns:
+        results = results.drop_duplicates(subset=["Title"], keep="first")
+
+    return results.reset_index(drop=True)
+
 # -----------------------------
 # Streamlit app
 # -----------------------------
@@ -859,9 +1060,10 @@ st.sidebar.write(f"PE Funds: {len(pe_funds)}")
 st.sidebar.write(f"Portfolio Companies: {len(portfolio_companies)}")
 st.sidebar.write(f"Opportunities: {len(opportunities)}")
 
-tab1, tab2 = st.tabs([
+tab1, tab2, tab3 = st.tabs([
     "Opportunity → PE Funds",
-    "PE Fund → Opportunities"
+    "PE Fund → Opportunities",
+    "News Search"
 ])
 
 
@@ -1073,4 +1275,127 @@ with tab2:
         else:
             st.dataframe(results_df, use_container_width=True)
 
+# -----------------------------
+# Tab 3: News search and deal signals
+# -----------------------------
+
+with tab3:
+    st.header("News Search & Deal Signals")
+    st.write(
+        "Search recent news for acquisitions, PE activity, sale processes, investor-seeking signals, "
+        "advisor mandates, and strategic growth signals. Results are live links from news sources; open the article to confirm details before adding anything to the database."
+    )
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        selected_group = st.selectbox(
+            "Preset search group",
+            list(DEFAULT_NEWS_QUERY_GROUPS.keys()),
+            index=0,
+        )
+
+    with col2:
+        days_back = st.selectbox(
+            "Time window",
+            [1, 7, 14, 30, 90],
+            index=3,
+            format_func=lambda x: f"Last {x} day" if x == 1 else f"Last {x} days",
+        )
+
+    with col3:
+        max_results_per_query = st.selectbox(
+            "Results per query",
+            [5, 10, 20, 30],
+            index=1,
+        )
+
+    locale_choice = st.radio(
+        "News region/language",
+        ["Spain / Spanish", "US / English", "UK / English", "Italy / Italian"],
+        horizontal=True,
+    )
+
+    locale_map = {
+        "Spain / Spanish": ("es-ES", "ES", "ES:es"),
+        "US / English": ("en-US", "US", "US:en"),
+        "UK / English": ("en-GB", "GB", "GB:en"),
+        "Italy / Italian": ("it-IT", "IT", "IT:it"),
+    }
+
+    hl, gl, ceid = locale_map[locale_choice]
+
+    default_queries = [
+        query.format(days=days_back)
+        for query in DEFAULT_NEWS_QUERY_GROUPS[selected_group]
+    ]
+
+    custom_query = st.text_input(
+        "Optional custom search",
+        placeholder='Example: "busca inversor" restaurantes España OR "restaurant acquisition Spain"',
+    )
+
+    with st.expander("Queries that will be searched"):
+        preview_queries = default_queries.copy()
+        if custom_query.strip():
+            preview_queries.insert(0, f"{custom_query.strip()} when:{days_back}d")
+        st.write(preview_queries)
+
+    if st.button("Search News", key="search_news"):
+        queries = default_queries.copy()
+        if custom_query.strip():
+            queries.insert(0, f"{custom_query.strip()} when:{days_back}d")
+
+        with st.spinner("Searching recent news..."):
+            news_df = search_multiple_news_queries(
+                queries,
+                hl=hl,
+                gl=gl,
+                ceid=ceid,
+                max_results_per_query=max_results_per_query,
+            )
+
+        if news_df.empty:
+            st.warning("No news results found. Try a broader query or longer time window.")
+        else:
+            signal_options = sorted(news_df["Signal Type"].dropna().unique().tolist())
+            selected_signals = st.multiselect(
+                "Filter by signal type",
+                signal_options,
+                default=signal_options,
+            )
+
+            filtered_news = news_df[news_df["Signal Type"].isin(selected_signals)].copy()
+
+            st.subheader(f"News Results ({len(filtered_news)})")
+
+            display_df = filtered_news[[
+                "Signal Type",
+                "Title",
+                "Source",
+                "Published",
+                "Search Query",
+                "Link",
+            ]]
+
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Link": st.column_config.LinkColumn("Link"),
+                },
+            )
+
+            st.download_button(
+                "Download news results as CSV",
+                data=filtered_news.to_csv(index=False).encode("utf-8-sig"),
+                file_name="news_search_results.csv",
+                mime="text/csv",
+            )
+
+            st.subheader("Review links")
+            for _, row in filtered_news.head(30).iterrows():
+                st.markdown(f"**{row['Signal Type']}** — [{row['Title']}]({row['Link']})")
+                st.caption(f"{row['Source']} | {row['Published']} | Query: {row['Search Query']}")
 
