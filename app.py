@@ -1,4 +1,5 @@
 import re
+import html
 import unicodedata
 import urllib.parse
 import urllib.request
@@ -776,74 +777,306 @@ NEWS_SIGNAL_KEYWORDS = {
     "Acquisition / completed deal": [
         "acquires", "acquired", "acquisition", "buyout", "takes stake", "stake in",
         "compra", "adquiere", "adquisicion", "adquisición", "participacion", "participación",
-        "majority stake", "minority stake", "investment in", "invierte en"
+        "rachète", "rachete", "acquiert", "prise de participation", "majorité", "minorité",
+        "acquisisce", "compra", "rileva", "partecipazione",
+        "majority stake", "minority stake", "investment in", "invierte en", "investit dans", "investe in"
     ],
     "Sale process / investor wanted": [
         "seeks investor", "seeking investor", "searches for investor", "looking for investor",
         "busca inversor", "busca socio", "busca comprador", "proceso de venta",
         "sale process", "for sale", "explores sale", "explora venta", "sell stake",
-        "venta de", "poner a la venta", "mandato de venta"
+        "venta de", "poner a la venta", "mandato de venta",
+        "cherche investisseur", "cherche repreneur", "mise en vente", "processus de vente",
+        "mandat de vente", "à vendre", "cession",
+        "cerca investitore", "cerca compratore", "processo di vendita", "in vendita"
     ],
     "Advisor / mandate signal": [
         "hires adviser", "hires advisor", "appoints adviser", "appoints advisor",
         "contrata asesor", "contrata a", "mandates", "mandata", "mandato",
-        "lazard", "rothschild", "alantra", "az capital", "kpmg", "pwc", "deloitte", "ey"
+        "mandate", "advisor", "adviser",
+        "mandate", "mandaté", "mandatee", "banque d'affaires", "conseil m&a",
+        "incarica", "advisor", "mandato",
+        "lazard", "rothschild", "alantra", "az capital", "kpmg", "pwc", "deloitte", "ey",
+        "clearwater", "dc advisory", "natixis", "goetzpartners", "nomura", "jefferies"
     ],
     "PE fund activity": [
         "private equity", "pe fund", "fondo de private equity", "capital privado",
+        "capital riesgo", "fondo de capital riesgo",
         "raises fund", "closes fund", "fundraising", "levanta fondo", "cierra fondo",
-        "new fund", "nuevo fondo"
+        "new fund", "nuevo fondo",
+        "capital-investissement", "fonds d'investissement", "levee de fonds", "levée de fonds",
+        "private equity", "fondo", "raccolta", "fundraising"
     ],
     "Strategic growth signal": [
         "expansion", "expands", "growth plan", "strategic plan", "raises debt",
         "refinancing", "international expansion", "crecimiento", "expansion", "expansión",
-        "plan estrategico", "plan estratégico", "refinanciacion", "refinanciación"
+        "plan estrategico", "plan estratégico", "refinanciacion", "refinanciación",
+        "croissance externe", "développement", "refinancement",
+        "crescita", "espansione", "piano strategico", "rifinanziamento"
     ],
 }
 
-DEFAULT_NEWS_QUERY_GROUPS = {
-    "Spain M&A / PE general": [
-        'Spain private equity acquisition when:{days}d',
-        'Spain M&A acquisition private equity when:{days}d',
-        'España capital privado adquisición when:{days}d',
-        'España fusiones adquisiciones private equity when:{days}d',
-        'España proceso de venta empresa when:{days}d',
-        'España busca inversor empresa when:{days}d',
-        'España contrata asesor venta empresa when:{days}d',
-    ],
-    "Restaurants / Hospitality": [
-        'Spain restaurant acquisition private equity when:{days}d',
-        'Spain hospitality acquisition private equity when:{days}d',
-        'España restaurantes adquisición capital privado when:{days}d',
-        'España hostelería busca inversor when:{days}d',
-        'España restaurantes proceso de venta when:{days}d',
-        'España cafeterías adquisición inversión when:{days}d',
-    ],
-    "Food & Beverage / Consumer": [
-        'Spain food beverage acquisition private equity when:{days}d',
-        'España alimentación adquisición capital privado when:{days}d',
-        'España bebidas adquisición inversión when:{days}d',
-        'España gran consumo busca inversor when:{days}d',
-        'España empresa alimentación proceso de venta when:{days}d',
-    ],
-    "Investor wanted / sale signals": [
-        '"busca inversor" empresa España when:{days}d',
-        '"busca socio" empresa España inversión when:{days}d',
-        '"proceso de venta" empresa España when:{days}d',
-        '"explora venta" empresa España when:{days}d',
-        '"contrata asesor" venta empresa España when:{days}d',
-        '"seeking investor" company Spain when:{days}d',
-        '"sale process" company Spain private equity when:{days}d',
-    ],
-    "Advisors / deal mandates": [
-        'Alantra venta empresa España when:{days}d',
-        'Lazard venta empresa España when:{days}d',
-        'Rothschild venta empresa España when:{days}d',
-        'KPMG corporate finance venta empresa España when:{days}d',
-        'Deloitte corporate finance venta empresa España when:{days}d',
-        'AZ Capital venta empresa España when:{days}d',
-    ],
+SOURCE_TIER_KEYWORDS = {
+    "Spain Tier 1": ["eleconomista", "el economista", "capital riesgo"],
+    "Spain Tier 2": ["expansion", "expansión", "elconfidencial", "el confidencial"],
+    "France Priority": ["cfnews", "les echos", "capital finance", "fusacq", "magazine des affaires"],
+    "US / UK Priority": ["reuters", "bloomberg", "financial times", "ft.com", "wall street journal", "wsj", "pe hub", "pitchbook"],
+    "Italy Priority": ["bebeez", "il sole 24 ore", "milanofinanza", "milano finanza", "borsaitaliana", "aifi"],
 }
+
+PRIORITY_SOURCE_DOMAINS = {
+    "Spain": ["eleconomista.es", "expansion.com", "elconfidencial.com"],
+    "France": ["cfnews.net", "lesechos.fr", "fusacq.com"],
+    "United States": ["reuters.com", "bloomberg.com", "pehub.com", "pitchbook.com"],
+    "United Kingdom": ["ft.com", "reuters.com", "cityam.com"],
+    "Italy": ["bebeez.it", "ilsole24ore.com", "milanofinanza.it"],
+}
+
+MARKET_SETTINGS = {
+    "Spain": {
+        "hl": "es-ES",
+        "gl": "ES",
+        "ceid": "ES:es",
+        "country_terms": ["España", "Spain"],
+        "queries": {
+            "General M&A / PE": [
+                "España capital riesgo adquisición when:{days}d",
+                "España private equity compra empresa when:{days}d",
+                "España fusiones adquisiciones capital riesgo when:{days}d",
+                "site:eleconomista.es/capital-riesgo adquisición OR compra when:{days}d",
+                "site:eleconomista.es/capital-riesgo busca comprador OR proceso de venta when:{days}d",
+            ],
+            "Restaurants / Hospitality": [
+                "España restaurantes adquisición capital riesgo when:{days}d",
+                "España hostelería busca inversor when:{days}d",
+                "España restaurantes proceso de venta when:{days}d",
+                "España cafeterías adquisición inversión when:{days}d",
+            ],
+            "Food & Beverage / Consumer": [
+                "España alimentación adquisición capital riesgo when:{days}d",
+                "España bebidas adquisición inversión when:{days}d",
+                "España gran consumo busca inversor when:{days}d",
+                "España empresa alimentación proceso de venta when:{days}d",
+            ],
+            "Investor wanted / sale signals": [
+                '"busca inversor" empresa España when:{days}d',
+                '"busca socio" empresa España inversión when:{days}d',
+                '"busca comprador" empresa España when:{days}d',
+                '"proceso de venta" empresa España when:{days}d',
+                '"explora venta" empresa España when:{days}d',
+                '"prepara su venta" empresa España when:{days}d',
+            ],
+            "Advisors / deal mandates": [
+                'Alantra venta empresa España when:{days}d',
+                'Lazard venta empresa España when:{days}d',
+                'Rothschild venta empresa España when:{days}d',
+                'KPMG corporate finance venta empresa España when:{days}d',
+                'Deloitte corporate finance venta empresa España when:{days}d',
+                'AZ Capital venta empresa España when:{days}d',
+            ],
+            "Fundraising / PE funds": [
+                "España capital riesgo nuevo fondo when:{days}d",
+                "España fondo capital privado levanta fondo when:{days}d",
+                "España private equity fundraising when:{days}d",
+            ],
+        },
+    },
+    "France": {
+        "hl": "fr-FR",
+        "gl": "FR",
+        "ceid": "FR:fr",
+        "country_terms": ["France", "Français", "française"],
+        "queries": {
+            "General M&A / PE": [
+                "France capital-investissement acquisition entreprise when:{days}d",
+                "France private equity rachète entreprise when:{days}d",
+                "France fusion acquisition fonds investissement when:{days}d",
+                "site:cfnews.net acquisition capital-investissement when:{days}d",
+                "site:fusacq.com cession acquisition entreprise when:{days}d",
+            ],
+            "Restaurants / Hospitality": [
+                "France restauration acquisition capital-investissement when:{days}d",
+                "France hôtellerie acquisition fonds investissement when:{days}d",
+                "France restauration cherche investisseur when:{days}d",
+                "France cafés restaurants cession when:{days}d",
+            ],
+            "Food & Beverage / Consumer": [
+                "France agroalimentaire acquisition capital-investissement when:{days}d",
+                "France boissons acquisition fonds investissement when:{days}d",
+                "France marque consumer cherche investisseur when:{days}d",
+                "France entreprise agroalimentaire cession when:{days}d",
+            ],
+            "Investor wanted / sale signals": [
+                '"cherche investisseur" entreprise France when:{days}d',
+                '"cherche repreneur" entreprise France when:{days}d',
+                '"processus de vente" entreprise France when:{days}d',
+                '"mise en vente" entreprise France when:{days}d',
+                '"mandat de vente" entreprise France when:{days}d',
+            ],
+            "Advisors / deal mandates": [
+                'Rothschild mandat vente entreprise France when:{days}d',
+                'Lazard mandat vente entreprise France when:{days}d',
+                'KPMG corporate finance cession entreprise France when:{days}d',
+                'Deloitte corporate finance cession entreprise France when:{days}d',
+                'Natixis Partners cession entreprise France when:{days}d',
+            ],
+            "Fundraising / PE funds": [
+                "France capital-investissement nouveau fonds when:{days}d",
+                "France fonds private equity levée de fonds when:{days}d",
+                "France private equity fundraising when:{days}d",
+            ],
+        },
+    },
+    "United States": {
+        "hl": "en-US",
+        "gl": "US",
+        "ceid": "US:en",
+        "country_terms": ["United States", "US", "USA"],
+        "queries": {
+            "General M&A / PE": [
+                "US private equity acquisition company when:{days}d",
+                "US M&A private equity acquisition when:{days}d",
+                "US private equity buys company when:{days}d",
+            ],
+            "Restaurants / Hospitality": [
+                "US restaurant acquisition private equity when:{days}d",
+                "US hospitality acquisition private equity when:{days}d",
+                "US restaurant chain seeks investor when:{days}d",
+            ],
+            "Food & Beverage / Consumer": [
+                "US food beverage acquisition private equity when:{days}d",
+                "US consumer brand acquisition private equity when:{days}d",
+                "US food company sale process when:{days}d",
+            ],
+            "Investor wanted / sale signals": [
+                '"seeking investor" company US when:{days}d',
+                '"sale process" company private equity US when:{days}d',
+                '"explores sale" company US private equity when:{days}d',
+                '"hires advisor" sale process company US when:{days}d',
+            ],
+            "Advisors / deal mandates": [
+                'Lazard sale process company US when:{days}d',
+                'Rothschild sale process company US when:{days}d',
+                'Jefferies sale process company US when:{days}d',
+                'Deloitte corporate finance sale company US when:{days}d',
+            ],
+            "Fundraising / PE funds": [
+                "US private equity raises fund when:{days}d",
+                "US private equity closes fund when:{days}d",
+                "US lower middle market private equity fund when:{days}d",
+            ],
+        },
+    },
+    "United Kingdom": {
+        "hl": "en-GB",
+        "gl": "GB",
+        "ceid": "GB:en",
+        "country_terms": ["United Kingdom", "UK", "Britain"],
+        "queries": {
+            "General M&A / PE": [
+                "UK private equity acquisition company when:{days}d",
+                "UK M&A private equity acquisition when:{days}d",
+                "UK private equity buys company when:{days}d",
+            ],
+            "Restaurants / Hospitality": [
+                "UK restaurant acquisition private equity when:{days}d",
+                "UK hospitality acquisition private equity when:{days}d",
+                "UK restaurant chain sale process when:{days}d",
+            ],
+            "Food & Beverage / Consumer": [
+                "UK food beverage acquisition private equity when:{days}d",
+                "UK consumer brand acquisition private equity when:{days}d",
+                "UK food company sale process when:{days}d",
+            ],
+            "Investor wanted / sale signals": [
+                '"seeking investor" company UK when:{days}d',
+                '"sale process" company private equity UK when:{days}d',
+                '"explores sale" company UK private equity when:{days}d',
+                '"hires advisor" sale process company UK when:{days}d',
+            ],
+            "Advisors / deal mandates": [
+                'Lazard sale process company UK when:{days}d',
+                'Rothschild sale process company UK when:{days}d',
+                'PwC corporate finance sale company UK when:{days}d',
+                'Deloitte corporate finance sale company UK when:{days}d',
+            ],
+            "Fundraising / PE funds": [
+                "UK private equity raises fund when:{days}d",
+                "UK private equity closes fund when:{days}d",
+                "UK lower mid-market private equity fund when:{days}d",
+            ],
+        },
+    },
+    "Italy": {
+        "hl": "it-IT",
+        "gl": "IT",
+        "ceid": "IT:it",
+        "country_terms": ["Italia", "Italy"],
+        "queries": {
+            "General M&A / PE": [
+                "Italia private equity acquisizione società when:{days}d",
+                "Italia fondo acquisisce azienda when:{days}d",
+                "Italia M&A private equity acquisizione when:{days}d",
+                "site:bebeez.it acquisizione private equity when:{days}d",
+            ],
+            "Restaurants / Hospitality": [
+                "Italia ristorazione acquisizione private equity when:{days}d",
+                "Italia hospitality acquisizione fondo when:{days}d",
+                "Italia ristoranti cerca investitore when:{days}d",
+            ],
+            "Food & Beverage / Consumer": [
+                "Italia alimentare acquisizione private equity when:{days}d",
+                "Italia food beverage acquisizione fondo when:{days}d",
+                "Italia azienda alimentare processo vendita when:{days}d",
+            ],
+            "Investor wanted / sale signals": [
+                '"cerca investitore" azienda Italia when:{days}d',
+                '"cerca compratore" azienda Italia when:{days}d',
+                '"processo di vendita" azienda Italia when:{days}d',
+                '"mandato di vendita" azienda Italia when:{days}d',
+            ],
+            "Advisors / deal mandates": [
+                'Rothschild mandato vendita azienda Italia when:{days}d',
+                'Lazard mandato vendita azienda Italia when:{days}d',
+                'KPMG corporate finance vendita azienda Italia when:{days}d',
+                'Deloitte corporate finance vendita azienda Italia when:{days}d',
+            ],
+            "Fundraising / PE funds": [
+                "Italia private equity nuovo fondo when:{days}d",
+                "Italia fondo private equity fundraising when:{days}d",
+                "Italia private equity raccolta fondo when:{days}d",
+            ],
+        },
+    },
+}
+
+COMPOSITE_MARKETS = {
+    "Spain": ["Spain"],
+    "France": ["France"],
+    "United States": ["United States"],
+    "United Kingdom": ["United Kingdom"],
+    "Italy": ["Italy"],
+    "Spain + France": ["Spain", "France"],
+    "US + UK": ["United States", "United Kingdom"],
+    "Europe": ["Spain", "France", "United Kingdom", "Italy"],
+    "All markets": ["Spain", "France", "United States", "United Kingdom", "Italy"],
+}
+
+NEWS_QUERY_GROUPS = [
+    "General M&A / PE",
+    "Restaurants / Hospitality",
+    "Food & Beverage / Consumer",
+    "Investor wanted / sale signals",
+    "Advisors / deal mandates",
+    "Fundraising / PE funds",
+]
+
+
+def strip_html(text):
+    text = html.unescape(str(text or ""))
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 
 def classify_news_signal(title, summary=""):
@@ -862,8 +1095,49 @@ def classify_news_signal(title, summary=""):
     return "Other / review manually"
 
 
+def classify_source_tier(source, title="", link=""):
+    text = normalize_text(f"{source} {title} {link}")
+
+    for tier, keywords in SOURCE_TIER_KEYWORDS.items():
+        for keyword in keywords:
+            if normalize_text(keyword) in text:
+                return tier
+
+    return "Other indexed source"
+
+
+def source_priority_score(source_tier, signal_type):
+    score = 0
+
+    if source_tier == "Spain Tier 1":
+        score += 50
+    elif source_tier in {"Spain Tier 2", "France Priority", "US / UK Priority", "Italy Priority"}:
+        score += 35
+    else:
+        score += 10
+
+    if "Sale process" in signal_type or "Advisor" in signal_type:
+        score += 35
+    elif "Acquisition" in signal_type:
+        score += 30
+    elif "PE fund activity" in signal_type:
+        score += 20
+    elif "Strategic growth" in signal_type:
+        score += 10
+
+    return score
+
+
+def priority_label(score):
+    if score >= 80:
+        return "High"
+    if score >= 55:
+        return "Medium"
+    return "Review"
+
+
 def clean_google_news_title(title):
-    title = str(title or "").strip()
+    title = strip_html(title)
     if " - " in title:
         return title.rsplit(" - ", 1)[0].strip()
     return title
@@ -878,8 +1152,91 @@ def parse_news_date(date_text):
         return str(date_text)
 
 
+def build_review_summary(signal_type, source_tier):
+    if "Sale process" in signal_type:
+        return "Potential sale process or investor-seeking signal. Review the original article to confirm the target company, seller, advisor, process stage, and whether a buyer/investor is being actively sought."
+    if "Advisor" in signal_type:
+        return "Potential mandate/advisor signal. Review the article to confirm whether an M&A advisor has been hired and whether this indicates an upcoming sale, acquisition, refinancing, or fundraising process."
+    if "Acquisition" in signal_type:
+        return "Potential completed acquisition or investment. Review the article to confirm buyer, seller, target, transaction type, sector, geography, and any valuation or financial details."
+    if "PE fund activity" in signal_type:
+        return "Potential private equity fund activity. Review the article to identify the fund, strategy, fundraising status, sector focus, and possible future investment implications."
+    if "Strategic growth" in signal_type:
+        return "Potential growth or expansion signal. Review the article to assess whether the company may need capital, consider M&A, or become relevant as a future opportunity."
+    return "Review manually. The result was returned by the search but the app did not detect a clear M&A or PE signal from the title/snippet alone."
+
+
+def build_review_action(signal_type):
+    if "Sale process" in signal_type or "Advisor" in signal_type:
+        return "Open source and consider adding as potential opportunity if confirmed."
+    if "Acquisition" in signal_type:
+        return "Open source and update market intelligence; add buyer/target if relevant."
+    if "PE fund activity" in signal_type:
+        return "Open source and update PE fund intelligence if relevant."
+    return "Open source and review relevance manually."
+
+
+def find_database_mentions(title, summary, opportunities, pe_funds, columns):
+    text = normalize_text(f"{title} {summary}")
+    mentions = []
+
+    opp_col = columns.get("opp_company")
+    if opp_col and not opportunities.empty:
+        for name in opportunities[opp_col].astype(str).dropna().unique():
+            name_clean = str(name).strip()
+            if len(name_clean) >= 4 and normalize_text(name_clean) in text:
+                mentions.append(f"Opportunity: {name_clean}")
+
+    fund_col = columns.get("fund_name")
+    if fund_col and not pe_funds.empty:
+        for name in pe_funds[fund_col].astype(str).dropna().unique():
+            name_clean = str(name).strip()
+            if len(name_clean) >= 4 and normalize_text(name_clean) in text:
+                mentions.append(f"PE Fund: {name_clean}")
+
+    return "; ".join(mentions[:8]) if mentions else ""
+
+
+def add_english_review_columns(news_df, opportunities, pe_funds, columns):
+    if news_df.empty:
+        return news_df
+
+    df = news_df.copy()
+    df["Original Snippet"] = df["Summary"].apply(strip_html)
+    df["Source Tier"] = df.apply(
+        lambda row: classify_source_tier(row.get("Source", ""), row.get("Title", ""), row.get("Link", "")),
+        axis=1,
+    )
+    df["Priority Score"] = df.apply(
+        lambda row: source_priority_score(row.get("Source Tier", ""), row.get("Signal Type", "")),
+        axis=1,
+    )
+    df["Priority"] = df["Priority Score"].apply(priority_label)
+    df["English Summary"] = df.apply(
+        lambda row: build_review_summary(row.get("Signal Type", ""), row.get("Source Tier", "")),
+        axis=1,
+    )
+    df["Why It Matters"] = df["English Summary"]
+    df["Review Action"] = df["Signal Type"].apply(build_review_action)
+    df["Database Mentions"] = df.apply(
+        lambda row: find_database_mentions(
+            row.get("Title", ""),
+            row.get("Original Snippet", ""),
+            opportunities,
+            pe_funds,
+            columns,
+        ),
+        axis=1,
+    )
+
+    return df.sort_values(
+        ["Priority Score", "Published"],
+        ascending=[False, False],
+    ).reset_index(drop=True)
+
+
 @st.cache_data(ttl=1800, show_spinner=False)
-def fetch_google_news(query, hl="es-ES", gl="ES", ceid="ES:es", max_results=20):
+def fetch_google_news(query, market, hl="es-ES", gl="ES", ceid="ES:es", max_results=20):
     encoded_query = urllib.parse.quote_plus(query)
     url = f"https://news.google.com/rss/search?q={encoded_query}&hl={hl}&gl={gl}&ceid={ceid}"
 
@@ -893,6 +1250,7 @@ def fetch_google_news(query, hl="es-ES", gl="ES", ceid="ES:es", max_results=20):
             xml_data = response.read()
     except Exception as exc:
         return pd.DataFrame([{
+            "Market": market,
             "Search Query": query,
             "Signal Type": "Search error",
             "Title": f"Could not load news feed: {exc}",
@@ -906,6 +1264,7 @@ def fetch_google_news(query, hl="es-ES", gl="ES", ceid="ES:es", max_results=20):
         root = ET.fromstring(xml_data)
     except ET.ParseError as exc:
         return pd.DataFrame([{
+            "Market": market,
             "Search Query": query,
             "Signal Type": "Parse error",
             "Title": f"Could not parse news feed: {exc}",
@@ -921,7 +1280,7 @@ def fetch_google_news(query, hl="es-ES", gl="ES", ceid="ES:es", max_results=20):
         title = clean_google_news_title(raw_title)
         link = item.findtext("link", default="")
         published = parse_news_date(item.findtext("pubDate", default=""))
-        summary = item.findtext("description", default="")
+        summary = strip_html(item.findtext("description", default=""))
 
         source = ""
         source_node = item.find("source")
@@ -931,6 +1290,7 @@ def fetch_google_news(query, hl="es-ES", gl="ES", ceid="ES:es", max_results=20):
             source = raw_title.rsplit(" - ", 1)[-1].strip()
 
         rows.append({
+            "Market": market,
             "Search Query": query,
             "Signal Type": classify_news_signal(title, summary),
             "Title": title,
@@ -943,14 +1303,63 @@ def fetch_google_news(query, hl="es-ES", gl="ES", ceid="ES:es", max_results=20):
     return pd.DataFrame(rows)
 
 
-def search_multiple_news_queries(queries, hl, gl, ceid, max_results_per_query):
+def build_news_search_jobs(selected_market, selected_group, days_back, custom_query, source_focus):
+    jobs = []
+
+    markets = COMPOSITE_MARKETS[selected_market]
+
+    for market in markets:
+        settings = MARKET_SETTINGS[market]
+        base_queries = [
+            query.format(days=days_back)
+            for query in settings["queries"][selected_group]
+        ]
+
+        if custom_query.strip():
+            base_queries.insert(0, f"{custom_query.strip()} when:{days_back}d")
+
+        if source_focus == "Priority sources only":
+            domains = PRIORITY_SOURCE_DOMAINS.get(market, [])
+            source_filtered_queries = []
+            for query in base_queries:
+                for domain in domains:
+                    source_filtered_queries.append(f"{query} site:{domain}")
+            base_queries = source_filtered_queries or base_queries
+
+        elif source_focus == "Priority sources first":
+            domains = PRIORITY_SOURCE_DOMAINS.get(market, [])
+            priority_queries = []
+            for query in base_queries[:3]:
+                for domain in domains[:3]:
+                    priority_queries.append(f"{query} site:{domain}")
+            base_queries = priority_queries + base_queries
+
+        for query in base_queries:
+            jobs.append({
+                "market": market,
+                "query": query,
+                "hl": settings["hl"],
+                "gl": settings["gl"],
+                "ceid": settings["ceid"],
+            })
+
+    return jobs
+
+
+def search_news_jobs(jobs, max_results_per_query):
     frames = []
 
-    for query in queries:
-        query = str(query).strip()
-        if not query:
-            continue
-        frames.append(fetch_google_news(query, hl, gl, ceid, max_results_per_query))
+    for job in jobs:
+        frames.append(
+            fetch_google_news(
+                job["query"],
+                market=job["market"],
+                hl=job["hl"],
+                gl=job["gl"],
+                ceid=job["ceid"],
+                max_results=max_results_per_query,
+            )
+        )
 
     if not frames:
         return pd.DataFrame()
@@ -1283,19 +1692,27 @@ with tab3:
     st.header("News Search & Deal Signals")
     st.write(
         "Search recent news for acquisitions, PE activity, sale processes, investor-seeking signals, "
-        "advisor mandates, and strategic growth signals. Results are live links from news sources; open the article to confirm details before adding anything to the database."
+        "advisor mandates, and strategic growth signals. The app searches in the local market language for better precision, "
+        "but the review fields and CSV export are in English."
     )
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        selected_group = st.selectbox(
-            "Preset search group",
-            list(DEFAULT_NEWS_QUERY_GROUPS.keys()),
+        selected_market = st.selectbox(
+            "Market",
+            list(COMPOSITE_MARKETS.keys()),
             index=0,
         )
 
     with col2:
+        selected_group = st.selectbox(
+            "Preset search group",
+            NEWS_QUERY_GROUPS,
+            index=0,
+        )
+
+    with col3:
         days_back = st.selectbox(
             "Time window",
             [1, 7, 14, 30, 90],
@@ -1303,83 +1720,129 @@ with tab3:
             format_func=lambda x: f"Last {x} day" if x == 1 else f"Last {x} days",
         )
 
-    with col3:
+    with col4:
         max_results_per_query = st.selectbox(
             "Results per query",
             [5, 10, 20, 30],
             index=1,
         )
 
-    locale_choice = st.radio(
-        "News region/language",
-        ["Spain / Spanish", "US / English", "UK / English", "Italy / Italian"],
+    source_focus = st.radio(
+        "Source focus",
+        ["Priority sources first", "Priority sources only", "All indexed sources"],
+        index=0,
         horizontal=True,
+        help="Priority sources include El Economista / Capital Riesgo, Expansión, El Confidencial, CFNEWS, Les Echos, Fusacq, Reuters, Bloomberg, FT, PE Hub, PitchBook, BeBeez, Il Sole 24 Ore, and similar sources.",
     )
-
-    locale_map = {
-        "Spain / Spanish": ("es-ES", "ES", "ES:es"),
-        "US / English": ("en-US", "US", "US:en"),
-        "UK / English": ("en-GB", "GB", "GB:en"),
-        "Italy / Italian": ("it-IT", "IT", "IT:it"),
-    }
-
-    hl, gl, ceid = locale_map[locale_choice]
-
-    default_queries = [
-        query.format(days=days_back)
-        for query in DEFAULT_NEWS_QUERY_GROUPS[selected_group]
-    ]
 
     custom_query = st.text_input(
         "Optional custom search",
-        placeholder='Example: "busca inversor" restaurantes España OR "restaurant acquisition Spain"',
+        placeholder='Examples: "busca comprador" restaurantes España, "cherche investisseur" restauration France, "sale process" restaurant chain',
+    )
+
+    jobs = build_news_search_jobs(
+        selected_market=selected_market,
+        selected_group=selected_group,
+        days_back=days_back,
+        custom_query=custom_query,
+        source_focus=source_focus,
     )
 
     with st.expander("Queries that will be searched"):
-        preview_queries = default_queries.copy()
-        if custom_query.strip():
-            preview_queries.insert(0, f"{custom_query.strip()} when:{days_back}d")
-        st.write(preview_queries)
+        preview_df = pd.DataFrame(jobs)
+        st.dataframe(
+            preview_df[["market", "query"]].head(60),
+            use_container_width=True,
+            hide_index=True,
+        )
+        if len(preview_df) > 60:
+            st.caption(f"Showing first 60 of {len(preview_df)} queries.")
 
     if st.button("Search News", key="search_news"):
-        queries = default_queries.copy()
-        if custom_query.strip():
-            queries.insert(0, f"{custom_query.strip()} when:{days_back}d")
-
         with st.spinner("Searching recent news..."):
-            news_df = search_multiple_news_queries(
-                queries,
-                hl=hl,
-                gl=gl,
-                ceid=ceid,
+            raw_news_df = search_news_jobs(
+                jobs,
                 max_results_per_query=max_results_per_query,
             )
 
-        if news_df.empty:
-            st.warning("No news results found. Try a broader query or longer time window.")
+        if raw_news_df.empty:
+            st.warning("No news results found. Try a broader query, longer time window, or all indexed sources.")
         else:
-            signal_options = sorted(news_df["Signal Type"].dropna().unique().tolist())
-            selected_signals = st.multiselect(
-                "Filter by signal type",
-                signal_options,
-                default=signal_options,
+            news_df = add_english_review_columns(
+                raw_news_df,
+                opportunities=opportunities,
+                pe_funds=pe_funds,
+                columns=columns,
             )
 
-            filtered_news = news_df[news_df["Signal Type"].isin(selected_signals)].copy()
+            market_options = sorted(news_df["Market"].dropna().unique().tolist())
+            signal_options = sorted(news_df["Signal Type"].dropna().unique().tolist())
+            tier_options = sorted(news_df["Source Tier"].dropna().unique().tolist())
+            priority_options = ["High", "Medium", "Review"]
+
+            f1, f2, f3 = st.columns(3)
+
+            with f1:
+                selected_priorities = st.multiselect(
+                    "Filter by priority",
+                    priority_options,
+                    default=priority_options,
+                )
+
+            with f2:
+                selected_signals = st.multiselect(
+                    "Filter by signal type",
+                    signal_options,
+                    default=signal_options,
+                )
+
+            with f3:
+                selected_tiers = st.multiselect(
+                    "Filter by source tier",
+                    tier_options,
+                    default=tier_options,
+                )
+
+            selected_markets = st.multiselect(
+                "Filter by market",
+                market_options,
+                default=market_options,
+            )
+
+            filtered_news = news_df[
+                news_df["Priority"].isin(selected_priorities)
+                & news_df["Signal Type"].isin(selected_signals)
+                & news_df["Source Tier"].isin(selected_tiers)
+                & news_df["Market"].isin(selected_markets)
+            ].copy()
 
             st.subheader(f"News Results ({len(filtered_news)})")
 
-            display_df = filtered_news[[
+            summary_counts = (
+                filtered_news.groupby(["Priority", "Signal Type"])
+                .size()
+                .reset_index(name="Count")
+                .sort_values(["Priority", "Count"], ascending=[True, False])
+            )
+
+            with st.expander("Signal summary"):
+                st.dataframe(summary_counts, use_container_width=True, hide_index=True)
+
+            display_columns = [
+                "Priority",
+                "Market",
                 "Signal Type",
+                "Source Tier",
                 "Title",
                 "Source",
                 "Published",
-                "Search Query",
+                "English Summary",
+                "Database Mentions",
                 "Link",
-            ]]
+            ]
 
             st.dataframe(
-                display_df,
+                filtered_news[display_columns],
                 use_container_width=True,
                 hide_index=True,
                 column_config={
@@ -1387,15 +1850,36 @@ with tab3:
                 },
             )
 
+            export_columns = [
+                "Priority",
+                "Priority Score",
+                "Market",
+                "Signal Type",
+                "Source Tier",
+                "Source",
+                "Published",
+                "Title",
+                "Original Snippet",
+                "English Summary",
+                "Why It Matters",
+                "Review Action",
+                "Database Mentions",
+                "Search Query",
+                "Link",
+            ]
+
             st.download_button(
-                "Download news results as CSV",
-                data=filtered_news.to_csv(index=False).encode("utf-8-sig"),
-                file_name="news_search_results.csv",
+                "Download English review CSV",
+                data=filtered_news[export_columns].to_csv(index=False).encode("utf-8-sig"),
+                file_name="news_deal_signals_english.csv",
                 mime="text/csv",
             )
 
             st.subheader("Review links")
             for _, row in filtered_news.head(30).iterrows():
-                st.markdown(f"**{row['Signal Type']}** — [{row['Title']}]({row['Link']})")
-                st.caption(f"{row['Source']} | {row['Published']} | Query: {row['Search Query']}")
+                st.markdown(f"**{row['Priority']} | {row['Signal Type']}** — [{row['Title']}]({row['Link']})")
+                st.caption(f"{row['Market']} | {row['Source Tier']} | {row['Source']} | {row['Published']} | Query: {row['Search Query']}")
+                st.write(row["English Summary"])
+                if row.get("Database Mentions"):
+                    st.write("Database mentions:", row["Database Mentions"])
 
