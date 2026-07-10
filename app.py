@@ -94,26 +94,30 @@ def get_google_sheets_client():
     return gspread.authorize(credentials)
 
 
-def get_opportunities_worksheet():
+def get_google_worksheet(worksheet_key, default_name):
+    """Open one worksheet from the configured Google Sheets database."""
     client = get_google_sheets_client()
 
     spreadsheet_name = st.secrets["google_sheets"].get(
         "spreadsheet_name",
-        "PE Opportunities Database",
+        "PE database",
     )
-    worksheet_name = st.secrets["google_sheets"].get(
-        "worksheet_name",
-        "Foglio1",
-    )
+
+    # Backward compatible: old app used worksheet_name for opportunities.
+    if worksheet_key == "opportunities_worksheet_name":
+        worksheet_name = st.secrets["google_sheets"].get(
+            worksheet_key,
+            st.secrets["google_sheets"].get("worksheet_name", default_name),
+        )
+    else:
+        worksheet_name = st.secrets["google_sheets"].get(worksheet_key, default_name)
 
     spreadsheet = client.open(spreadsheet_name)
     return spreadsheet.worksheet(worksheet_name)
 
 
-def load_opportunities_from_google_sheet():
-    worksheet = get_opportunities_worksheet()
+def sheet_to_dataframe(worksheet):
     records = worksheet.get_all_records()
-
     df = pd.DataFrame(records)
 
     if df.empty:
@@ -123,23 +127,52 @@ def load_opportunities_from_google_sheet():
     return df.fillna("")
 
 
+def get_opportunities_worksheet():
+    return get_google_worksheet("opportunities_worksheet_name", "pe_opportunities")
+
+
+def get_pe_funds_worksheet():
+    return get_google_worksheet("pe_funds_worksheet_name", "pe_funds")
+
+
+def load_opportunities_from_google_sheet():
+    return sheet_to_dataframe(get_opportunities_worksheet())
+
+
+def load_pe_funds_from_google_sheet():
+    return sheet_to_dataframe(get_pe_funds_worksheet())
+
+
 def load_opportunities_database():
-    """Use Google Sheets as the live database when configured; fall back to CSV if needed."""
+    """Use Google Sheets as the live opportunities database; fall back to CSV if needed."""
     if google_sheets_configured():
         try:
             df = load_opportunities_from_google_sheet()
             if not df.empty:
                 return df, "Google Sheets", ""
-            return load_csv("opportunities.csv"), "CSV fallback", "Google Sheet is empty."
+            return load_csv("opportunities.csv"), "CSV fallback", "Google opportunities sheet is empty."
         except Exception as exc:
             return load_csv("opportunities.csv"), "CSV fallback", str(exc)
 
     return load_csv("opportunities.csv"), "CSV", "Google Sheets is not configured."
 
 
-def append_opportunity_to_google_sheet(row_data):
-    """Append a new opportunity to the Google Sheet using the existing sheet headers."""
-    worksheet = get_opportunities_worksheet()
+def load_pe_funds_database():
+    """Use Google Sheets as the live PE funds database; fall back to CSV if needed."""
+    if google_sheets_configured():
+        try:
+            df = load_pe_funds_from_google_sheet()
+            if not df.empty:
+                return df, "Google Sheets", ""
+            return load_csv("pe_funds_database.csv"), "CSV fallback", "Google PE funds sheet is empty."
+        except Exception as exc:
+            return load_csv("pe_funds_database.csv"), "CSV fallback", str(exc)
+
+    return load_csv("pe_funds_database.csv"), "CSV", "Google Sheets is not configured."
+
+
+def append_row_to_worksheet(worksheet, row_data):
+    """Append a row using the existing sheet headers."""
     headers = worksheet.row_values(1)
 
     if not headers:
@@ -156,6 +189,14 @@ def append_opportunity_to_google_sheet(row_data):
         row_values.append(normalized_row_data.get(clean_header, ""))
 
     worksheet.append_row(row_values, value_input_option="USER_ENTERED")
+
+
+def append_opportunity_to_google_sheet(row_data):
+    append_row_to_worksheet(get_opportunities_worksheet(), row_data)
+
+
+def append_pe_fund_to_google_sheet(row_data):
+    append_row_to_worksheet(get_pe_funds_worksheet(), row_data)
 
 
 def find_column(df, possible_names):
@@ -1559,11 +1600,10 @@ st.set_page_config(page_title="PE Matcher", layout="wide")
 
 st.title("PE Intelligence Copilot")
 st.write(
-    "Version 3.2: Matching scores only sector/subsector fit, EBITDA fit, and geography fit. "
-    "Revenue and ticket size remain visible/exportable as reference information, but they are not used in the score. "
-    "Opportunities can now be read from Google Sheets and added directly from the website."
+    "Version 3.3: Opportunities and PE funds can now be read from Google Sheets and added directly from the website. "
+    "Matching scores only sector/subsector fit, EBITDA fit, and geography fit. Revenue and ticket size remain reference-only."
 )
-pe_funds = load_csv("pe_funds_database.csv")
+pe_funds, pe_funds_source, pe_funds_load_warning = load_pe_funds_database()
 portfolio_companies = load_csv("portfolio_companies.csv")
 opportunities, opportunities_source, opportunities_load_warning = load_opportunities_database()
 website_enrichment = load_optional_csv("website_enrichment.csv")
@@ -1648,15 +1688,20 @@ st.sidebar.write(f"PE Funds: {len(pe_funds)}")
 st.sidebar.write(f"Portfolio Companies: {len(portfolio_companies)}")
 st.sidebar.write(f"Opportunities: {len(opportunities)}")
 st.sidebar.write(f"Opportunities source: {opportunities_source}")
+st.sidebar.write(f"PE funds source: {pe_funds_source}")
 if opportunities_load_warning:
     with st.sidebar.expander("Opportunities source warning"):
         st.write(opportunities_load_warning)
+if pe_funds_load_warning:
+    with st.sidebar.expander("PE funds source warning"):
+        st.write(pe_funds_load_warning)
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Opportunity → PE Funds",
     "PE Fund → Opportunities",
     "News Search",
-    "Add Opportunity"
+    "Add Opportunity",
+    "Add PE Fund"
 ])
 
 
@@ -1981,6 +2026,126 @@ with tab4:
 
     with st.expander("Current opportunity columns"):
         st.write(list(opportunities.columns))
+
+
+
+
+# -----------------------------
+# Tab 5: Add PE fund to Google Sheets
+# -----------------------------
+
+with tab5:
+    st.header("Add a New PE Fund")
+    st.write(
+        "Use this form to add a new PE fund directly to the live Google Sheets database. "
+        "Revenue and ticket ranges are saved as reference information only."
+    )
+
+    if pe_funds_source != "Google Sheets":
+        st.warning(
+            "The app is not currently reading PE funds from Google Sheets. "
+            "Check Streamlit Secrets and the pe_funds worksheet before using this form."
+        )
+
+    with st.form("add_pe_fund_form", clear_on_submit=True):
+        st.subheader("Required fields")
+
+        p1, p2, p3 = st.columns(3)
+
+        with p1:
+            new_fund_name = st.text_input("Fund Name *")
+            new_website = st.text_input("Website")
+            new_geography = st.text_input("Geography", value="Spain")
+
+        with p2:
+            new_primary_sectors = st.text_area("Primary Sectors *", height=90)
+            new_secondary_sectors = st.text_area("Secondary Sectors", height=90)
+
+        with p3:
+            new_ebitda_min = st.text_input("EBITDA Min (€m)", placeholder="Example: 3")
+            new_ebitda_max = st.text_input("EBITDA Max (€m)", placeholder="Example: 15")
+            new_transaction_type = st.text_input("Transaction Type")
+
+        st.subheader("Reference ranges")
+
+        r1, r2 = st.columns(2)
+
+        with r1:
+            new_revenue_min = st.text_input("Revenue Min (€m)")
+            new_revenue_max = st.text_input("Revenue Max (€m)")
+
+        with r2:
+            new_ticket_min = st.text_input("Ticket Min (€m)")
+            new_ticket_max = st.text_input("Ticket Max (€m)")
+
+        st.subheader("Additional information")
+
+        b1, b2 = st.columns(2)
+
+        with b1:
+            new_business_model_preference = st.text_input("Business Model Preference")
+            new_preferred_characteristics = st.text_area("Preferred Characteristics", height=100)
+
+        with b2:
+            new_avoid = st.text_area("Avoid / Negative Criteria", height=100)
+            new_notes = st.text_area("Notes", height=100)
+
+        submitted_pe = st.form_submit_button("Add PE fund to database")
+
+    if submitted_pe:
+        errors = []
+
+        if not new_fund_name.strip():
+            errors.append("Fund Name is required.")
+        if not new_primary_sectors.strip():
+            errors.append("Primary Sectors is required.")
+
+        numeric_fields = {
+            "EBITDA Min": new_ebitda_min,
+            "EBITDA Max": new_ebitda_max,
+            "Revenue Min": new_revenue_min,
+            "Revenue Max": new_revenue_max,
+            "Ticket Min": new_ticket_min,
+            "Ticket Max": new_ticket_max,
+        }
+
+        for label, value in numeric_fields.items():
+            if value.strip() and parse_number(value) is None:
+                errors.append(f"{label} must be a number, for example 5 or 5.5.")
+
+        if errors:
+            for error in errors:
+                st.error(error)
+        else:
+            new_pe_row = {
+                "fund_name": new_fund_name.strip(),
+                "website": new_website.strip(),
+                "ebitda_min": new_ebitda_min.strip(),
+                "ebitda_max": new_ebitda_max.strip(),
+                "ticket_min": new_ticket_min.strip(),
+                "ticket_max": new_ticket_max.strip(),
+                "revenue_min": new_revenue_min.strip(),
+                "revenue_max": new_revenue_max.strip(),
+                "primary_sectors": new_primary_sectors.strip(),
+                "secondary_sectors": new_secondary_sectors.strip(),
+                "business_model_preference": new_business_model_preference.strip(),
+                "preferred_characteristics": new_preferred_characteristics.strip(),
+                "avoid": new_avoid.strip(),
+                "geography": new_geography.strip(),
+                "transaction_type": new_transaction_type.strip(),
+                "notes": new_notes.strip(),
+            }
+
+            try:
+                append_pe_fund_to_google_sheet(new_pe_row)
+                st.success(f"{new_fund_name.strip()} was added to the Google Sheets PE funds database.")
+                st.info("Refresh the app or switch tabs and rerun to see the new PE fund in the match selectors.")
+            except Exception as exc:
+                st.error("The PE fund could not be added to Google Sheets.")
+                st.write(str(exc))
+
+    with st.expander("Current PE fund columns"):
+        st.write(list(pe_funds.columns))
 
 
 # -----------------------------
