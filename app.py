@@ -62,6 +62,102 @@ def load_optional_csv(file_name):
     return load_csv(file_name)
 
 
+# -----------------------------
+# Google Sheets helpers
+# -----------------------------
+
+GOOGLE_SHEETS_SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+
+
+def google_sheets_configured():
+    return "gcp_service_account" in st.secrets and "google_sheets" in st.secrets
+
+
+def get_google_sheets_client():
+    import gspread
+    from google.oauth2.service_account import Credentials
+
+    credentials_info = dict(st.secrets["gcp_service_account"])
+
+    # Streamlit TOML secrets may store the key with real line breaks or with escaped \n.
+    if "private_key" in credentials_info:
+        credentials_info["private_key"] = credentials_info["private_key"].replace("\\n", "\n")
+
+    credentials = Credentials.from_service_account_info(
+        credentials_info,
+        scopes=GOOGLE_SHEETS_SCOPES,
+    )
+
+    return gspread.authorize(credentials)
+
+
+def get_opportunities_worksheet():
+    client = get_google_sheets_client()
+
+    spreadsheet_name = st.secrets["google_sheets"].get(
+        "spreadsheet_name",
+        "PE Opportunities Database",
+    )
+    worksheet_name = st.secrets["google_sheets"].get(
+        "worksheet_name",
+        "Foglio1",
+    )
+
+    spreadsheet = client.open(spreadsheet_name)
+    return spreadsheet.worksheet(worksheet_name)
+
+
+def load_opportunities_from_google_sheet():
+    worksheet = get_opportunities_worksheet()
+    records = worksheet.get_all_records()
+
+    df = pd.DataFrame(records)
+
+    if df.empty:
+        return pd.DataFrame()
+
+    df.columns = [clean_column_name(c) for c in df.columns]
+    return df.fillna("")
+
+
+def load_opportunities_database():
+    """Use Google Sheets as the live database when configured; fall back to CSV if needed."""
+    if google_sheets_configured():
+        try:
+            df = load_opportunities_from_google_sheet()
+            if not df.empty:
+                return df, "Google Sheets", ""
+            return load_csv("opportunities.csv"), "CSV fallback", "Google Sheet is empty."
+        except Exception as exc:
+            return load_csv("opportunities.csv"), "CSV fallback", str(exc)
+
+    return load_csv("opportunities.csv"), "CSV", "Google Sheets is not configured."
+
+
+def append_opportunity_to_google_sheet(row_data):
+    """Append a new opportunity to the Google Sheet using the existing sheet headers."""
+    worksheet = get_opportunities_worksheet()
+    headers = worksheet.row_values(1)
+
+    if not headers:
+        raise ValueError("The Google Sheet has no header row.")
+
+    normalized_row_data = {
+        clean_column_name(key): value
+        for key, value in row_data.items()
+    }
+
+    row_values = []
+    for header in headers:
+        clean_header = clean_column_name(header)
+        row_values.append(normalized_row_data.get(clean_header, ""))
+
+    worksheet.append_row(row_values, value_input_option="USER_ENTERED")
+
+
 def find_column(df, possible_names):
     if df.empty:
         return None
@@ -1463,12 +1559,13 @@ st.set_page_config(page_title="PE Matcher", layout="wide")
 
 st.title("PE Intelligence Copilot")
 st.write(
-    "Version 3.1: Matching now scores only sector/subsector fit, EBITDA fit, and geography fit. "
-    "Revenue and ticket size remain visible/exportable as reference information, but they are not used in the score."
+    "Version 3.2: Matching scores only sector/subsector fit, EBITDA fit, and geography fit. "
+    "Revenue and ticket size remain visible/exportable as reference information, but they are not used in the score. "
+    "Opportunities can now be read from Google Sheets and added directly from the website."
 )
 pe_funds = load_csv("pe_funds_database.csv")
 portfolio_companies = load_csv("portfolio_companies.csv")
-opportunities = load_csv("opportunities.csv")
+opportunities, opportunities_source, opportunities_load_warning = load_opportunities_database()
 website_enrichment = load_optional_csv("website_enrichment.csv")
 
 
@@ -1550,11 +1647,16 @@ st.sidebar.header("Data Loaded")
 st.sidebar.write(f"PE Funds: {len(pe_funds)}")
 st.sidebar.write(f"Portfolio Companies: {len(portfolio_companies)}")
 st.sidebar.write(f"Opportunities: {len(opportunities)}")
+st.sidebar.write(f"Opportunities source: {opportunities_source}")
+if opportunities_load_warning:
+    with st.sidebar.expander("Opportunities source warning"):
+        st.write(opportunities_load_warning)
 
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "Opportunity → PE Funds",
     "PE Fund → Opportunities",
-    "News Search"
+    "News Search",
+    "Add Opportunity"
 ])
 
 
@@ -1767,6 +1869,119 @@ with tab2:
             st.warning("No opportunity matches were produced. Check whether opportunities have sector and financial data.")
         else:
             st.dataframe(results_df, use_container_width=True)
+
+
+# -----------------------------
+# Tab 4: Add opportunity to Google Sheets
+# -----------------------------
+
+with tab4:
+    st.header("Add a New Opportunity")
+    st.write(
+        "Use this form to add a new opportunity directly to the live Google Sheets database. "
+        "Revenue and ticket/enterprise value are saved as reference information only."
+    )
+
+    if opportunities_source != "Google Sheets":
+        st.warning(
+            "The app is not currently reading opportunities from Google Sheets. "
+            "Check Streamlit Secrets and the Google Sheet sharing settings before using this form."
+        )
+
+    with st.form("add_opportunity_form", clear_on_submit=True):
+        st.subheader("Required fields")
+
+        f1, f2, f3 = st.columns(3)
+
+        with f1:
+            new_company = st.text_input("Company *")
+            new_sector = st.text_input("Sector *")
+            new_subsector = st.text_input("Subsector")
+
+        with f2:
+            new_ebitda = st.text_input("EBITDA (€m) *", placeholder="Example: 5.5")
+            new_revenue = st.text_input("Revenue (€m)", placeholder="Example: 25")
+            new_enterprise_value = st.text_input("Enterprise Value / Ticket (€m)", placeholder="Optional")
+
+        with f3:
+            new_geography = st.text_input("Geography", value="Spain")
+            new_deal_type = st.text_input("Deal Type")
+            new_stage = st.text_input("Stage")
+
+        st.subheader("Additional information")
+
+        a1, a2 = st.columns(2)
+
+        with a1:
+            new_owner = st.text_input("Owner")
+            new_advisor = st.text_input("Advisor")
+            new_timing = st.text_input("Timing")
+            new_source = st.text_input("Source")
+
+        with a2:
+            new_business_model = st.text_input("Business Model")
+            new_characteristics = st.text_input("Characteristics / Keywords")
+            new_margin = st.text_input("Margin (%)")
+            new_last_update = st.text_input("Last Update")
+
+        new_description = st.text_area("Description", height=120)
+        new_comment = st.text_area("Comment", height=80)
+
+        submitted = st.form_submit_button("Add opportunity to database")
+
+    if submitted:
+        errors = []
+
+        if not new_company.strip():
+            errors.append("Company is required.")
+        if not new_sector.strip():
+            errors.append("Sector is required.")
+        if not new_ebitda.strip():
+            errors.append("EBITDA is required.")
+        elif parse_number(new_ebitda) is None:
+            errors.append("EBITDA must be a number, for example 5 or 5.5.")
+
+        if errors:
+            for error in errors:
+                st.error(error)
+        else:
+            new_row = {
+                "company": new_company.strip(),
+                "sector": new_sector.strip(),
+                "subsector": new_subsector.strip(),
+                "revenue": new_revenue.strip(),
+                "ebitda": new_ebitda.strip(),
+                "margin": new_margin.strip(),
+                "enterprise_value": new_enterprise_value.strip(),
+                "description": new_description.strip(),
+                "business_model": new_business_model.strip(),
+                "characteristics": new_characteristics.strip(),
+                "owner": new_owner.strip(),
+                "advisor": new_advisor.strip(),
+                "stage": new_stage.strip(),
+                "timing": new_timing.strip(),
+                "comment": new_comment.strip(),
+                "last_update": new_last_update.strip(),
+                "source": new_source.strip(),
+                "deal_type": new_deal_type.strip(),
+                "geography": new_geography.strip(),
+            }
+
+            try:
+                append_opportunity_to_google_sheet(new_row)
+                st.success(
+                    f"{new_company.strip()} was added to the Google Sheets opportunities database."
+                )
+                st.info(
+                    "Refresh the app or switch tabs and rerun to see the new opportunity in the match selectors."
+                )
+            except Exception as exc:
+                st.error("The opportunity could not be added to Google Sheets.")
+                st.write(str(exc))
+
+    with st.expander("Current opportunity columns"):
+        st.write(list(opportunities.columns))
+
 
 # -----------------------------
 # Tab 3: News search and deal signals
