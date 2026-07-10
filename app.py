@@ -437,21 +437,36 @@ def detect_geography(text):
 
     geographies = {
         "spain": [
-            "spain", "spanish", "espana", "madrid", "barcelona",
+            "spain", "spanish", "espana", "españa", "madrid", "barcelona",
             "valencia", "sevilla", "bilbao"
         ],
         "iberia": [
-            "iberia", "iberian", "spain", "portugal", "espana"
+            "iberia", "iberian", "spain", "portugal", "espana", "españa"
         ],
         "portugal": [
             "portugal", "lisbon", "porto"
         ],
+        "france": [
+            "france", "french", "francia", "paris"
+        ],
+        "italy": [
+            "italy", "italia", "italian", "milan", "milano", "rome", "roma"
+        ],
+        "united_kingdom": [
+            "united kingdom", "uk", "britain", "british", "london"
+        ],
+        "united_states": [
+            "united states", "usa", "us", "america", "american", "new york"
+        ],
         "europe": [
-            "europe", "european", "europa"
+            "europe", "european", "europa", "western europe", "southern europe"
         ],
         "latin_america": [
             "latin america", "latam", "mexico", "colombia",
             "chile", "argentina", "peru"
+        ],
+        "global": [
+            "global", "worldwide", "international", "agnostic"
         ],
     }
 
@@ -464,6 +479,90 @@ def detect_geography(text):
                 break
 
     return detected
+
+
+def format_geographies(geographies):
+    labels = {
+        "spain": "Spain",
+        "iberia": "Iberia",
+        "portugal": "Portugal",
+        "france": "France",
+        "italy": "Italy",
+        "united_kingdom": "United Kingdom",
+        "united_states": "United States",
+        "europe": "Europe",
+        "latin_america": "Latin America",
+        "global": "Global",
+    }
+
+    return ", ".join(labels.get(g, g) for g in sorted(geographies))
+
+
+def geography_fit(opportunity_geo, fund_geo):
+    """Score geography fit as a bonus, without making it a hard filter."""
+    if not opportunity_geo:
+        return {
+            "scored": False,
+            "ratio": 0,
+            "status": "Missing opportunity geography",
+            "detail": "Geography: opportunity geography is not clearly defined.",
+            "matches": set(),
+        }
+
+    if not fund_geo:
+        return {
+            "scored": False,
+            "ratio": 0,
+            "status": "Fund geography missing",
+            "detail": "Geography: fund geography is not clearly defined.",
+            "matches": set(),
+        }
+
+    direct_matches = opportunity_geo & fund_geo
+    if direct_matches:
+        return {
+            "scored": True,
+            "ratio": 1.0,
+            "status": "Match",
+            "detail": "Geography: direct match on " + format_geographies(direct_matches) + ".",
+            "matches": direct_matches,
+        }
+
+    broad_matches = set()
+
+    # Broad region logic: a Spanish or Portuguese opportunity can fit an Iberian fund,
+    # and European country opportunities can fit a Europe-focused fund.
+    if "iberia" in fund_geo and (opportunity_geo & {"spain", "portugal"}):
+        broad_matches.add("iberia")
+    if "europe" in fund_geo and (opportunity_geo & {"spain", "portugal", "france", "italy", "united_kingdom", "iberia"}):
+        broad_matches.add("europe")
+    if "global" in fund_geo:
+        broad_matches.add("global")
+    if "latin_america" in fund_geo and (opportunity_geo & {"latin_america"}):
+        broad_matches.add("latin_america")
+
+    if broad_matches:
+        return {
+            "scored": True,
+            "ratio": 0.85,
+            "status": "Broad region match",
+            "detail": "Geography: broad region match on " + format_geographies(broad_matches) + ".",
+            "matches": broad_matches,
+        }
+
+    return {
+        "scored": True,
+        "ratio": 0,
+        "status": "No match",
+        "detail": (
+            "Geography: no clear match. Opportunity geography is "
+            + format_geographies(opportunity_geo)
+            + "; fund geography is "
+            + format_geographies(fund_geo)
+            + "."
+        ),
+        "matches": set(),
+    }
 
 
 # -----------------------------
@@ -595,24 +694,30 @@ def score_match(opportunity, fund, portfolio_companies, enrichment, columns, enr
             related_portfolio[columns["portfolio_activity"]].astype(str).tolist()
         )
 
+    # Matching weights:
+    # Revenue and ticket size are intentionally NOT used in the score.
+    # They remain available as reference information in the app/export.
     weights = {
-        "ebitda": 25,
-        "revenue": 20,
-        "ticket": 20,
-        "sector": 25,
-        "characteristics": 10,
+        "sector": 50,
+        "ebitda": 35,
+        "geography": 15,
     }
 
     score_data = {"earned": 0.0, "possible": 0.0}
 
-    # 1. Financial fit
+    # 1. EBITDA fit
+    # Only EBITDA is scored. Revenue and ticket are reference-only.
     ebitda_fit = range_fit(opp_ebitda, fund_ebitda_min, fund_ebitda_max, "EBITDA")
-    revenue_fit = range_fit(opp_revenue, fund_revenue_min, fund_revenue_max, "Revenue")
-    ticket_fit = range_fit(opp_ticket, fund_ticket_min, fund_ticket_max, "Ticket")
-
     add_weighted_score(score_data, weights["ebitda"], ebitda_fit)
-    add_weighted_score(score_data, weights["revenue"], revenue_fit)
-    add_weighted_score(score_data, weights["ticket"], ticket_fit)
+
+    revenue_reference = (
+        f"Reference only — opportunity revenue {format_metric(opp_revenue)}; "
+        f"fund revenue range {format_range(fund_revenue_min, fund_revenue_max)}. Not used in score."
+    )
+    ticket_reference = (
+        f"Reference only — opportunity ticket/EV {format_metric(opp_ticket)}; "
+        f"fund ticket range {format_range(fund_ticket_min, fund_ticket_max)}. Not used in score."
+    )
 
     # 2. Sector fit
     opportunity_categories = detect_categories(opportunity_text)
@@ -652,7 +757,17 @@ def score_match(opportunity, fund, portfolio_companies, enrichment, columns, enr
         score_data["possible"] += weights["sector"]
         score_data["earned"] += weights["sector"] * sector_ratio
 
-    # 3. Characteristics fit
+    # 3. Geography fit
+    # Geography is scored as a smaller bonus. It is not a hard filter.
+    opportunity_geo = detect_geography(opportunity_text)
+    fund_geo = detect_geography(fund_focus_text + " " + fund_enrichment_text)
+    geography_result = geography_fit(opportunity_geo, fund_geo)
+    geography_matches = geography_result["matches"]
+
+    add_weighted_score(score_data, weights["geography"], geography_result)
+
+    # 4. Qualitative signals
+    # These are shown for context only. They do NOT influence the match score.
     opportunity_specific = detect_specific_terms(opportunity_text)
     fund_specific = detect_specific_terms(fund_focus_text + " " + portfolio_text)
     website_specific = detect_specific_terms(fund_enrichment_text)
@@ -662,60 +777,25 @@ def score_match(opportunity, fund, portfolio_companies, enrichment, columns, enr
     website_specific_matches = opportunity_specific & website_specific
     avoid_matches = opportunity_specific & avoid_specific
 
-    opportunity_geo = detect_geography(opportunity_text)
-    fund_geo = detect_geography(fund_focus_text + " " + fund_enrichment_text)
-    geography_matches = opportunity_geo & fund_geo
-
-    characteristics_possible = len(opportunity_text.strip()) > 0 and len(fund_focus_text.strip()) > 0
-    characteristics_ratio = 0
-
-    if len(specific_matches) > 0:
-        characteristics_ratio += 0.55
-    if len(website_specific_matches) > 0:
-        characteristics_ratio += 0.15
-    if len(geography_matches) > 0:
-        characteristics_ratio += 0.15
-
-    # Explicit B2B / B2C and deal-type signals
-    if opp_business_model and fund_business_model and normalize_text(opp_business_model) in normalize_text(fund_business_model):
-        characteristics_ratio += 0.10
-    if opp_deal_type and fund_transaction_type and normalize_text(opp_deal_type) in normalize_text(fund_transaction_type):
-        characteristics_ratio += 0.10
-
-    if len(avoid_matches) > 0:
-        characteristics_ratio -= 0.30
-
-    characteristics_ratio = max(0, min(characteristics_ratio, 1.0))
-
     if len(avoid_matches) > 0:
         characteristics_status = "Risk / avoid signal"
-    elif characteristics_ratio >= 0.70:
-        characteristics_status = "Match"
-    elif characteristics_ratio >= 0.35:
-        characteristics_status = "Partial match"
-    elif characteristics_possible:
-        characteristics_status = "Weak match"
+    elif len(specific_matches) > 0 or len(website_specific_matches) > 0:
+        characteristics_status = "Reference signal"
     else:
-        characteristics_status = "Not scored"
+        characteristics_status = "No strong reference signal"
 
     characteristics_parts = []
     if len(specific_matches) > 0:
-        characteristics_parts.append("matched terms: " + ", ".join(sorted(specific_matches)[:8]))
+        characteristics_parts.append("matched reference terms: " + ", ".join(sorted(specific_matches)[:8]))
     if len(website_specific_matches) > 0:
         characteristics_parts.append("website confirms: " + ", ".join(sorted(website_specific_matches)[:6]))
-    if len(geography_matches) > 0:
-        characteristics_parts.append("geography: " + ", ".join(sorted(geography_matches)))
     if len(avoid_matches) > 0:
         characteristics_parts.append("avoid/risk terms: " + ", ".join(sorted(avoid_matches)[:6]))
 
     if characteristics_parts:
-        characteristics_detail = "Characteristics: " + "; ".join(characteristics_parts) + "."
+        characteristics_detail = "Qualitative signals, not scored: " + "; ".join(characteristics_parts) + "."
     else:
-        characteristics_detail = "Characteristics: no strong qualitative match found."
-
-    if characteristics_possible:
-        score_data["possible"] += weights["characteristics"]
-        score_data["earned"] += weights["characteristics"] * characteristics_ratio
+        characteristics_detail = "Qualitative signals, not scored: no strong qualitative match found."
 
     # Final scores
     total_weight = sum(weights.values())
@@ -742,10 +822,11 @@ def score_match(opportunity, fund, portfolio_companies, enrichment, columns, enr
     matched_sector = format_categories(sector_matches | portfolio_sector_matches | website_sector_matches)
 
     reasons = [
-        ebitda_fit["detail"],
-        revenue_fit["detail"],
-        ticket_fit["detail"],
         sector_detail,
+        ebitda_fit["detail"],
+        geography_result["detail"],
+        revenue_reference,
+        ticket_reference,
         characteristics_detail,
     ]
 
@@ -757,9 +838,10 @@ def score_match(opportunity, fund, portfolio_companies, enrichment, columns, enr
         "reason": " ".join(reasons),
         "matched_sector": matched_sector,
         "ebitda_fit": ebitda_fit["status"] + " — " + ebitda_fit["detail"],
-        "revenue_fit": revenue_fit["status"] + " — " + revenue_fit["detail"],
-        "ticket_fit": ticket_fit["status"] + " — " + ticket_fit["detail"],
+        "revenue_reference": revenue_reference,
+        "ticket_reference": ticket_reference,
         "sector_fit": sector_status + " — " + sector_detail,
+        "geography_fit": geography_result["status"] + " — " + geography_result["detail"],
         "characteristics_fit": characteristics_status + " — " + characteristics_detail,
         "portfolio_signal": len(portfolio_sector_matches),
         "specific_signal": len(specific_matches),
@@ -1381,8 +1463,8 @@ st.set_page_config(page_title="PE Matcher", layout="wide")
 
 st.title("PE Intelligence Copilot")
 st.write(
-    "Version 3.0: Financial and strategic matching. The app now scores EBITDA, revenue, "
-    "ticket size, sector fit, and qualitative characteristics, then shows where each fund matches or does not match."
+    "Version 3.1: Matching now scores only sector/subsector fit, EBITDA fit, and geography fit. "
+    "Revenue and ticket size remain visible/exportable as reference information, but they are not used in the score."
 )
 pe_funds = load_csv("pe_funds_database.csv")
 portfolio_companies = load_csv("portfolio_companies.csv")
@@ -1552,9 +1634,10 @@ with tab1:
                 "Fit Score": match["fit_score"],
                 "Data Completeness": match["data_completeness"],
                 "EBITDA Fit": match["ebitda_fit"],
-                "Revenue Fit": match["revenue_fit"],
-                "Ticket Fit": match["ticket_fit"],
+                "Revenue Reference": match["revenue_reference"],
+                "Ticket Reference": match["ticket_reference"],
                 "Sector Fit": match["sector_fit"],
+                "Geography Fit": match["geography_fit"],
                 "Characteristics Fit": match["characteristics_fit"],
                 "Matched Sector": match["matched_sector"],
                 "Primary Sectors": safe_get(fund, columns["fund_sector"]),
@@ -1622,8 +1705,8 @@ with tab2:
     with col3:
         st.write("**Target Ranges**")
         st.write("EBITDA:", format_range(get_number(selected_fund, columns["fund_ebitda_min"]), get_number(selected_fund, columns["fund_ebitda_max"])))
-        st.write("Revenue:", format_range(get_number(selected_fund, columns["fund_revenue_min"]), get_number(selected_fund, columns["fund_revenue_max"])))
-        st.write("Ticket:", format_range(get_number(selected_fund, columns["fund_ticket_min"]), get_number(selected_fund, columns["fund_ticket_max"])))
+        st.write("Revenue reference:", format_range(get_number(selected_fund, columns["fund_revenue_min"]), get_number(selected_fund, columns["fund_revenue_max"])))
+        st.write("Ticket reference:", format_range(get_number(selected_fund, columns["fund_ticket_min"]), get_number(selected_fund, columns["fund_ticket_max"])))
 
     if columns["portfolio_fund"] and columns["portfolio_company"]:
         related_portfolio = portfolio_companies[
@@ -1660,9 +1743,10 @@ with tab2:
                 "Fit Score": match["fit_score"],
                 "Data Completeness": match["data_completeness"],
                 "EBITDA Fit": match["ebitda_fit"],
-                "Revenue Fit": match["revenue_fit"],
-                "Ticket Fit": match["ticket_fit"],
+                "Revenue Reference": match["revenue_reference"],
+                "Ticket Reference": match["ticket_reference"],
                 "Sector Fit": match["sector_fit"],
+                "Geography Fit": match["geography_fit"],
                 "Characteristics Fit": match["characteristics_fit"],
                 "Sector": safe_get(opportunity, columns["opp_sector"]),
                 "Subsector": safe_get(opportunity, columns["opp_subsector"]),
