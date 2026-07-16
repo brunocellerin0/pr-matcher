@@ -1686,6 +1686,18 @@ def add_english_review_columns(news_df, opportunities, pe_funds, columns):
     ).reset_index(drop=True)
 
 
+NEWS_RESULT_COLUMNS = [
+    "Market",
+    "Search Query",
+    "Signal Type",
+    "Title",
+    "Source",
+    "Published",
+    "Link",
+    "Summary",
+]
+
+
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_google_news(query, market, hl="es-ES", gl="ES", ceid="ES:es", max_results=20):
     encoded_query = urllib.parse.quote_plus(query)
@@ -1751,7 +1763,10 @@ def fetch_google_news(query, market, hl="es-ES", gl="ES", ceid="ES:es", max_resu
             "Summary": summary,
         })
 
-    return pd.DataFrame(rows)
+    # Keep the expected columns even when Google News returns zero articles.
+    # Without this, an empty DataFrame has no "Signal Type" column and the
+    # research-group relabeling step raises a KeyError.
+    return pd.DataFrame(rows, columns=NEWS_RESULT_COLUMNS)
 
 
 def build_news_search_jobs(
@@ -1838,6 +1853,11 @@ def search_news_jobs(jobs, max_results_per_query):
             ceid=job["ceid"],
             max_results=max_results_per_query,
         ).copy()
+
+        # Defensive fallback for cached/legacy responses or unexpected feeds.
+        for column in NEWS_RESULT_COLUMNS:
+            if column not in frame.columns:
+                frame[column] = ""
 
         frame["Research Group"] = job.get("research_group", "")
         frame["Research Target"] = job.get("research_target", "")
