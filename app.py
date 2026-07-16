@@ -1281,14 +1281,236 @@ COMPOSITE_MARKETS = {
     "All markets": ["Spain", "France", "United States", "United Kingdom", "Italy"],
 }
 
+SECTOR_SEARCH_TERMS = {
+    "Restaurants / Hospitality": {
+        "Spain": "restaurantes hostelería hoteles catering cafeterías",
+        "France": "restauration hôtellerie hôtels cafés traiteur",
+        "United States": "restaurants hospitality hotels catering coffee chains",
+        "United Kingdom": "restaurants hospitality hotels catering coffee chains",
+        "Italy": "ristorazione hospitality hotel catering caffetterie",
+    },
+    "Food & Beverage": {
+        "Spain": "alimentación bebidas agroalimentario food beverage",
+        "France": "agroalimentaire alimentation boissons food beverage",
+        "United States": "food beverage food manufacturing consumer foods",
+        "United Kingdom": "food beverage food manufacturing consumer foods",
+        "Italy": "alimentare bevande agroalimentare food beverage",
+    },
+    "Consumer / Retail": {
+        "Spain": "consumo retail comercio marcas moda ecommerce",
+        "France": "consommation retail commerce marques mode ecommerce",
+        "United States": "consumer retail brands fashion ecommerce",
+        "United Kingdom": "consumer retail brands fashion ecommerce",
+        "Italy": "consumer retail commercio marchi moda ecommerce",
+    },
+    "Healthcare": {
+        "Spain": "salud sanitario clínicas dental farmacéutico veterinario diagnóstico",
+        "France": "santé médical cliniques dentaire pharmaceutique vétérinaire diagnostic",
+        "United States": "healthcare medical clinics dental pharmaceutical veterinary diagnostics",
+        "United Kingdom": "healthcare medical clinics dental pharmaceutical veterinary diagnostics",
+        "Italy": "sanità sanitario cliniche dentale farmaceutico veterinario diagnostica",
+    },
+    "Technology / Software": {
+        "Spain": "tecnología software SaaS ciberseguridad fintech datos inteligencia artificial",
+        "France": "technologie logiciel SaaS cybersécurité fintech données intelligence artificielle",
+        "United States": "technology software SaaS cybersecurity fintech data artificial intelligence",
+        "United Kingdom": "technology software SaaS cybersecurity fintech data artificial intelligence",
+        "Italy": "tecnologia software SaaS cybersecurity fintech dati intelligenza artificiale",
+    },
+    "Industrial / Manufacturing": {
+        "Spain": "industrial fabricación manufactura maquinaria automatización componentes packaging",
+        "France": "industrie fabrication manufacturier machines automatisation composants emballage",
+        "United States": "industrial manufacturing machinery automation components packaging",
+        "United Kingdom": "industrial manufacturing machinery automation components packaging",
+        "Italy": "industria manifattura macchinari automazione componenti packaging",
+    },
+    "Business Services": {
+        "Spain": "servicios empresariales outsourcing mantenimiento facility staffing consultoría seguridad",
+        "France": "services aux entreprises externalisation maintenance facility staffing conseil sécurité",
+        "United States": "business services outsourcing facilities maintenance staffing consulting security",
+        "United Kingdom": "business services outsourcing facilities maintenance staffing consulting security",
+        "Italy": "servizi alle imprese outsourcing facility manutenzione staffing consulenza sicurezza",
+    },
+    "Energy / Infrastructure": {
+        "Spain": "energía renovables solar eólica infraestructura utilities residuos agua medioambiente",
+        "France": "énergie renouvelable solaire éolien infrastructure utilities déchets eau environnement",
+        "United States": "energy renewables solar wind infrastructure utilities waste water environmental",
+        "United Kingdom": "energy renewables solar wind infrastructure utilities waste water environmental",
+        "Italy": "energia rinnovabili solare eolico infrastrutture utilities rifiuti acqua ambiente",
+    },
+    "Logistics / Transport": {
+        "Spain": "logística transporte distribución almacenes supply chain freight movilidad",
+        "France": "logistique transport distribution entrepôts supply chain fret mobilité",
+        "United States": "logistics transport distribution warehousing supply chain freight mobility",
+        "United Kingdom": "logistics transport distribution warehousing supply chain freight mobility",
+        "Italy": "logistica trasporti distribuzione magazzini supply chain freight mobilità",
+    },
+    "Education / Training": {
+        "Spain": "educación formación academias escuelas edtech aprendizaje",
+        "France": "éducation formation écoles académies edtech apprentissage",
+        "United States": "education training schools academies edtech learning",
+        "United Kingdom": "education training schools academies edtech learning",
+        "Italy": "educazione formazione scuole accademie edtech apprendimento",
+    },
+    "Construction / Real Estate": {
+        "Spain": "construcción inmobiliario real estate materiales edificios property services",
+        "France": "construction immobilier real estate matériaux bâtiments services immobiliers",
+        "United States": "construction real estate building materials property services",
+        "United Kingdom": "construction real estate building materials property services",
+        "Italy": "costruzioni immobiliare real estate materiali edilizia property services",
+    },
+    "Financial Services": {
+        "Spain": "servicios financieros seguros pagos crédito lending wealth management fintech",
+        "France": "services financiers assurance paiements crédit gestion de patrimoine fintech",
+        "United States": "financial services insurance payments lending wealth management fintech",
+        "United Kingdom": "financial services insurance payments lending wealth management fintech",
+        "Italy": "servizi finanziari assicurazioni pagamenti credito wealth management fintech",
+    },
+}
+
+MARKET_RESEARCH_PHRASES = {
+    "Spain": {
+        "country": "España",
+        "deal": [
+            "adquisición private equity",
+            "busca inversor OR proceso de venta",
+            "inversión crecimiento expansión",
+            "fusiones adquisiciones empresas",
+            "tendencias mercado regulación innovación",
+        ],
+        "company": [
+            "adquisición OR inversión OR venta",
+            "expansión OR crecimiento OR resultados",
+            "alianza OR contrato OR lanzamiento",
+            "competidores OR tendencias OR regulación",
+        ],
+    },
+    "France": {
+        "country": "France",
+        "deal": [
+            "acquisition capital-investissement",
+            "cherche investisseur OR processus de vente",
+            "investissement croissance développement",
+            "fusion acquisition entreprise",
+            "tendances marché réglementation innovation",
+        ],
+        "company": [
+            "acquisition OR investissement OR cession",
+            "croissance OR développement OR résultats",
+            "partenariat OR contrat OR lancement",
+            "concurrents OR tendances OR réglementation",
+        ],
+    },
+    "United States": {
+        "country": "United States",
+        "deal": [
+            "private equity acquisition",
+            "seeks investor OR sale process",
+            "investment growth expansion",
+            "M&A company acquisition",
+            "market trends regulation innovation",
+        ],
+        "company": [
+            "acquisition OR investment OR sale",
+            "growth OR expansion OR results",
+            "partnership OR contract OR launch",
+            "competitors OR trends OR regulation",
+        ],
+    },
+    "United Kingdom": {
+        "country": "United Kingdom",
+        "deal": [
+            "private equity acquisition",
+            "seeks investor OR sale process",
+            "investment growth expansion",
+            "M&A company acquisition",
+            "market trends regulation innovation",
+        ],
+        "company": [
+            "acquisition OR investment OR sale",
+            "growth OR expansion OR results",
+            "partnership OR contract OR launch",
+            "competitors OR trends OR regulation",
+        ],
+    },
+    "Italy": {
+        "country": "Italia",
+        "deal": [
+            "acquisizione private equity",
+            "cerca investitore OR processo di vendita",
+            "investimento crescita espansione",
+            "fusioni acquisizioni aziende",
+            "tendenze mercato regolamentazione innovazione",
+        ],
+        "company": [
+            "acquisizione OR investimento OR vendita",
+            "crescita OR espansione OR risultati",
+            "partnership OR contratto OR lancio",
+            "concorrenti OR tendenze OR regolamentazione",
+        ],
+    },
+}
+
+SECTOR_NEWS_GROUPS = list(SECTOR_SEARCH_TERMS.keys())
+
 NEWS_QUERY_GROUPS = [
     "General M&A / PE",
-    "Restaurants / Hospitality",
-    "Food & Beverage / Consumer",
+    "Company / Sector Conversation Material",
+    *SECTOR_NEWS_GROUPS,
     "Investor wanted / sale signals",
     "Advisors / deal mandates",
     "Fundraising / PE funds",
 ]
+
+
+def build_sector_search_queries(market, selected_group, days_back):
+    sector_terms = SECTOR_SEARCH_TERMS[selected_group][market]
+    market_profile = MARKET_RESEARCH_PHRASES[market]
+    country = market_profile["country"]
+
+    return [
+        f"{country} {sector_terms} {phrase} when:{days_back}d"
+        for phrase in market_profile["deal"]
+    ]
+
+
+def build_company_context_queries(market, research_context, days_back):
+    research_context = research_context or {}
+    name = str(research_context.get("name", "")).strip()
+    sector = str(research_context.get("sector", "")).strip()
+    subsector = str(research_context.get("subsector", "")).strip()
+    description = str(research_context.get("description", "")).strip()
+    geography = str(research_context.get("geography", "")).strip()
+
+    market_profile = MARKET_RESEARCH_PHRASES[market]
+    country = market_profile["country"]
+    queries = []
+
+    if name:
+        queries.append(f'"{name}" when:{days_back}d')
+        for phrase in market_profile["company"]:
+            queries.append(f'"{name}" {phrase} when:{days_back}d')
+
+    context_text = " ".join(part for part in [sector, subsector] if part).strip()
+    description_terms = sorted(tokenize(description))[:6]
+    if description_terms:
+        context_text = " ".join([context_text, *description_terms]).strip()
+
+    if context_text:
+        queries.append(
+            f"{country} {context_text} private equity acquisition investment when:{days_back}d"
+        )
+        queries.append(
+            f"{country} {context_text} competitors market trends growth when:{days_back}d"
+        )
+
+    if geography and geography.lower() not in normalize_text(country):
+        queries.append(
+            f"{geography} {context_text or name} acquisition investment growth when:{days_back}d"
+        )
+
+    # Preserve order while removing duplicates and blanks.
+    return list(dict.fromkeys(query for query in queries if query.strip()))
 
 
 def strip_html(text):
@@ -1341,6 +1563,8 @@ def source_priority_score(source_tier, signal_type):
         score += 30
     elif "PE fund activity" in signal_type:
         score += 20
+    elif "Company / sector intelligence" in signal_type or "Sector intelligence" in signal_type:
+        score += 15
     elif "Strategic growth" in signal_type:
         score += 10
 
@@ -1380,6 +1604,10 @@ def build_review_summary(signal_type, source_tier):
         return "Potential completed acquisition or investment. Review the article to confirm buyer, seller, target, transaction type, sector, geography, and any valuation or financial details."
     if "PE fund activity" in signal_type:
         return "Potential private equity fund activity. Review the article to identify the fund, strategy, fundraising status, sector focus, and possible future investment implications."
+    if "Company / sector intelligence" in signal_type:
+        return "Relevant company or sector development for conversation preparation. Review the original source and extract verified facts on strategy, growth, products, partnerships, competitors, regulation, and recent market developments."
+    if "Sector intelligence" in signal_type:
+        return "Relevant sector development that may indicate acquisition targets, investment themes, competitive activity, or useful conversation material. Review the original source and confirm the companies and facts involved."
     if "Strategic growth" in signal_type:
         return "Potential growth or expansion signal. Review the article to assess whether the company may need capital, consider M&A, or become relevant as a future opportunity."
     return "Review manually. The result was returned by the search but the app did not detect a clear M&A or PE signal from the title/snippet alone."
@@ -1392,6 +1620,10 @@ def build_review_action(signal_type):
         return "Open source and update market intelligence; add buyer/target if relevant."
     if "PE fund activity" in signal_type:
         return "Open source and update PE fund intelligence if relevant."
+    if "Company / sector intelligence" in signal_type:
+        return "Open source and use verified facts as company or sector conversation material."
+    if "Sector intelligence" in signal_type:
+        return "Open source and assess whether the company, theme, or transaction should enter the opportunity pipeline."
     return "Open source and review relevance manually."
 
 
@@ -1522,63 +1754,106 @@ def fetch_google_news(query, market, hl="es-ES", gl="ES", ceid="ES:es", max_resu
     return pd.DataFrame(rows)
 
 
-def build_news_search_jobs(selected_market, selected_group, days_back, custom_query, source_focus):
+def build_news_search_jobs(
+    selected_market,
+    selected_group,
+    days_back,
+    custom_query,
+    source_focus,
+    research_context=None,
+):
     jobs = []
-
     markets = COMPOSITE_MARKETS[selected_market]
+    research_context = research_context or {}
+    research_target = str(research_context.get("name", "")).strip() or selected_group
 
     for market in markets:
         settings = MARKET_SETTINGS[market]
-        base_queries = [
-            query.format(days=days_back)
-            for query in settings["queries"][selected_group]
-        ]
+
+        if selected_group == "Company / Sector Conversation Material":
+            base_queries = build_company_context_queries(
+                market,
+                research_context,
+                days_back,
+            )
+        elif selected_group in SECTOR_SEARCH_TERMS:
+            base_queries = build_sector_search_queries(
+                market,
+                selected_group,
+                days_back,
+            )
+        else:
+            preset_queries = settings["queries"].get(selected_group, [])
+            base_queries = [
+                query.format(days=days_back)
+                for query in preset_queries
+            ]
 
         if custom_query.strip():
             base_queries.insert(0, f"{custom_query.strip()} when:{days_back}d")
 
+        base_queries = list(dict.fromkeys(query for query in base_queries if query.strip()))
+
         if source_focus == "Priority sources only":
             domains = PRIORITY_SOURCE_DOMAINS.get(market, [])
             source_filtered_queries = []
-            for query in base_queries:
-                for domain in domains:
+            # Limit combinations so broad multi-market searches remain usable.
+            for domain in domains[:4]:
+                for query in base_queries[:3]:
                     source_filtered_queries.append(f"{query} site:{domain}")
             base_queries = source_filtered_queries or base_queries
 
         elif source_focus == "Priority sources first":
             domains = PRIORITY_SOURCE_DOMAINS.get(market, [])
             priority_queries = []
-            for query in base_queries[:3]:
-                for domain in domains[:3]:
+            for domain in domains[:3]:
+                for query in base_queries[:2]:
                     priority_queries.append(f"{query} site:{domain}")
             base_queries = priority_queries + base_queries
 
-        for query in base_queries:
+        for query in list(dict.fromkeys(base_queries)):
             jobs.append({
                 "market": market,
                 "query": query,
                 "hl": settings["hl"],
                 "gl": settings["gl"],
                 "ceid": settings["ceid"],
+                "research_group": selected_group,
+                "research_target": research_target,
             })
 
-    return jobs
+    # Sequential RSS calls can become slow on very broad searches.
+    return jobs[:80]
 
 
 def search_news_jobs(jobs, max_results_per_query):
     frames = []
 
     for job in jobs:
-        frames.append(
-            fetch_google_news(
-                job["query"],
-                market=job["market"],
-                hl=job["hl"],
-                gl=job["gl"],
-                ceid=job["ceid"],
-                max_results=max_results_per_query,
-            )
-        )
+        frame = fetch_google_news(
+            job["query"],
+            market=job["market"],
+            hl=job["hl"],
+            gl=job["gl"],
+            ceid=job["ceid"],
+            max_results=max_results_per_query,
+        ).copy()
+
+        frame["Research Group"] = job.get("research_group", "")
+        frame["Research Target"] = job.get("research_target", "")
+
+        if job.get("research_group") == "Company / Sector Conversation Material":
+            frame.loc[
+                frame["Signal Type"] == "Other / review manually",
+                "Signal Type",
+            ] = "Company / sector intelligence"
+        elif job.get("research_group") in SECTOR_SEARCH_TERMS:
+            frame.loc[
+                frame["Signal Type"] == "Other / review manually",
+                "Signal Type",
+            ] = "Sector intelligence / opportunity signal"
+
+        frames.append(frame)
 
     if not frames:
         return pd.DataFrame()
@@ -1600,8 +1875,9 @@ st.set_page_config(page_title="PE Matcher", layout="wide")
 
 st.title("PE Intelligence Copilot")
 st.write(
-    "Version 3.3: Opportunities and PE funds can now be read from Google Sheets and added directly from the website. "
-    "Matching scores only sector/subsector fit, EBITDA fit, and geography fit. Revenue and ticket size remain reference-only."
+    "Version 3.4: Expanded sector research and company-specific conversation intelligence. Opportunities and PE funds "
+    "can be read from Google Sheets and added directly from the website. Matching scores only sector/subsector fit, "
+    "EBITDA fit, and geography fit. Revenue and ticket size remain reference-only."
 )
 pe_funds, pe_funds_source, pe_funds_load_warning = load_pe_funds_database()
 portfolio_companies = load_csv("portfolio_companies.csv")
@@ -2155,9 +2431,10 @@ with tab5:
 with tab3:
     st.header("News Search & Deal Signals")
     st.write(
-        "Search recent news for acquisitions, PE activity, sale processes, investor-seeking signals, "
-        "advisor mandates, and strategic growth signals. The app searches in the local market language for better precision, "
-        "but the review fields and CSV export are in English."
+        "Search recent news across all major PE sectors, including healthcare, technology, industrials, business services, "
+        "energy, logistics, education, real estate, financial services, consumer, food, and hospitality. You can also select "
+        "a company or PE fund from the database to create highly relevant conversation material. Searches run in the local "
+        "market language for precision, while review fields and CSV exports remain in English."
     )
 
     col1, col2, col3, col4 = st.columns(4)
@@ -2171,9 +2448,10 @@ with tab3:
 
     with col2:
         selected_group = st.selectbox(
-            "Preset search group",
+            "Research group",
             NEWS_QUERY_GROUPS,
             index=0,
+            help="Choose a deal signal, a complete PE sector, or company-specific conversation research.",
         )
 
     with col3:
@@ -2191,6 +2469,90 @@ with tab3:
             index=1,
         )
 
+    research_context = {}
+
+    if selected_group == "Company / Sector Conversation Material":
+        st.subheader("Conversation research target")
+        context_source = st.radio(
+            "Select the target from",
+            ["Opportunity database", "PE fund database", "Manual company"],
+            horizontal=True,
+        )
+
+        if context_source == "Opportunity database":
+            context_names = opportunities[columns["opp_company"]].astype(str).tolist()
+            selected_context_name = st.selectbox(
+                "Company / opportunity",
+                context_names,
+                key="news_context_opportunity",
+            )
+            context_row = opportunities[
+                opportunities[columns["opp_company"]].astype(str) == selected_context_name
+            ].iloc[0]
+            research_context = {
+                "name": safe_get(context_row, columns["opp_company"]),
+                "sector": safe_get(context_row, columns["opp_sector"]),
+                "subsector": safe_get(context_row, columns["opp_subsector"]),
+                "description": safe_get(context_row, columns["opp_description"]),
+                "geography": safe_get(context_row, columns["opp_country"]),
+            }
+
+        elif context_source == "PE fund database":
+            context_names = pe_funds[columns["fund_name"]].astype(str).tolist()
+            selected_context_name = st.selectbox(
+                "PE fund",
+                context_names,
+                key="news_context_fund",
+            )
+            context_row = pe_funds[
+                pe_funds[columns["fund_name"]].astype(str) == selected_context_name
+            ].iloc[0]
+            research_context = {
+                "name": safe_get(context_row, columns["fund_name"]),
+                "sector": safe_get(context_row, columns["fund_sector"]),
+                "subsector": safe_get(context_row, columns["fund_secondary_sector"]),
+                "description": " ".join([
+                    safe_get(context_row, columns["fund_preferred_characteristics"]),
+                    safe_get(context_row, columns["fund_notes"]),
+                ]),
+                "geography": safe_get(context_row, columns["fund_geography"]),
+            }
+
+        else:
+            manual1, manual2, manual3 = st.columns(3)
+            with manual1:
+                manual_company = st.text_input("Company name")
+            with manual2:
+                manual_sector = st.text_input("Sector")
+            with manual3:
+                manual_subsector = st.text_input("Subsector")
+            manual_description = st.text_area(
+                "Company description or keywords",
+                placeholder="Products, customers, business model, competitors, geography, and any topic your boss wants to discuss.",
+            )
+            research_context = {
+                "name": manual_company,
+                "sector": manual_sector,
+                "subsector": manual_subsector,
+                "description": manual_description,
+                "geography": selected_market,
+            }
+
+        if any(str(value).strip() for value in research_context.values()):
+            st.info(
+                "Research context: "
+                + " | ".join(
+                    str(value).strip()
+                    for value in [
+                        research_context.get("name", ""),
+                        research_context.get("sector", ""),
+                        research_context.get("subsector", ""),
+                        research_context.get("geography", ""),
+                    ]
+                    if str(value).strip()
+                )
+            )
+
     source_focus = st.radio(
         "Source focus",
         ["Priority sources first", "Priority sources only", "All indexed sources"],
@@ -2201,7 +2563,7 @@ with tab3:
 
     custom_query = st.text_input(
         "Optional custom search",
-        placeholder='Examples: "busca comprador" restaurantes España, "cherche investisseur" restauration France, "sale process" restaurant chain',
+        placeholder='Examples: energy services acquisition, dental clinics investor, industrial automation sale process, or an exact company/topic.',
     )
 
     jobs = build_news_search_jobs(
@@ -2210,7 +2572,11 @@ with tab3:
         days_back=days_back,
         custom_query=custom_query,
         source_focus=source_focus,
+        research_context=research_context,
     )
+
+    if selected_group == "Company / Sector Conversation Material" and not jobs:
+        st.warning("Enter or select a company, sector, or description to create conversation-material searches.")
 
     with st.expander("Queries that will be searched"):
         preview_df = pd.DataFrame(jobs)
@@ -2295,6 +2661,8 @@ with tab3:
             display_columns = [
                 "Priority",
                 "Market",
+                "Research Group",
+                "Research Target",
                 "Signal Type",
                 "Source Tier",
                 "Title",
@@ -2318,6 +2686,8 @@ with tab3:
                 "Priority",
                 "Priority Score",
                 "Market",
+                "Research Group",
+                "Research Target",
                 "Signal Type",
                 "Source Tier",
                 "Source",
