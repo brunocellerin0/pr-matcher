@@ -135,12 +135,20 @@ def get_pe_funds_worksheet():
     return get_google_worksheet("pe_funds_worksheet_name", "pe_funds")
 
 
+def get_us_pe_funds_worksheet():
+    return get_google_worksheet("us_pe_funds_worksheet_name", "us_pe_funds")
+
+
 def load_opportunities_from_google_sheet():
     return sheet_to_dataframe(get_opportunities_worksheet())
 
 
 def load_pe_funds_from_google_sheet():
     return sheet_to_dataframe(get_pe_funds_worksheet())
+
+
+def load_us_pe_funds_from_google_sheet():
+    return sheet_to_dataframe(get_us_pe_funds_worksheet())
 
 
 def load_opportunities_database():
@@ -169,6 +177,23 @@ def load_pe_funds_database():
             return load_csv("pe_funds_database.csv"), "CSV fallback", str(exc)
 
     return load_csv("pe_funds_database.csv"), "CSV", "Google Sheets is not configured."
+
+
+def load_us_pe_funds_database():
+    """Use the dedicated U.S. PE worksheet; fall back to a local starter CSV."""
+    fallback_name = "us_pe_funds_database.csv"
+    if google_sheets_configured():
+        try:
+            df = load_us_pe_funds_from_google_sheet()
+            if not df.empty:
+                return df, "Google Sheets", ""
+            fallback = load_optional_csv(fallback_name)
+            return fallback, "CSV fallback", "Google U.S. PE funds sheet is empty."
+        except Exception as exc:
+            fallback = load_optional_csv(fallback_name)
+            return fallback, "CSV fallback", str(exc)
+
+    return load_optional_csv(fallback_name), "CSV", "Google Sheets is not configured."
 
 
 def append_row_to_worksheet(worksheet, row_data):
@@ -248,22 +273,22 @@ def parse_number(value):
         return None
 
 
-def format_metric(value):
+def format_metric(value, currency_symbol="€"):
     if value is None:
         return "n.a."
     if abs(value - round(value)) < 0.001:
-        return f"€{int(round(value))}m"
-    return f"€{value:.1f}m"
+        return f"{currency_symbol}{int(round(value))}m"
+    return f"{currency_symbol}{value:.1f}m"
 
 
-def format_range(min_value, max_value):
+def format_range(min_value, max_value, currency_symbol="€"):
     if min_value is None and max_value is None:
         return "not defined"
     if min_value is None:
-        return f"≤ {format_metric(max_value)}"
+        return f"≤ {format_metric(max_value, currency_symbol)}"
     if max_value is None:
-        return f"≥ {format_metric(min_value)}"
-    return f"{format_metric(min_value)}–{format_metric(max_value)}"
+        return f"≥ {format_metric(min_value, currency_symbol)}"
+    return f"{format_metric(min_value, currency_symbol)}–{format_metric(max_value, currency_symbol)}"
 
 
 def get_number(row, col):
@@ -272,7 +297,7 @@ def get_number(row, col):
     return parse_number(row.get(col, ""))
 
 
-def range_fit(value, min_value, max_value, label):
+def range_fit(value, min_value, max_value, label, currency_symbol="€"):
     """Score how well an opportunity metric fits a fund range."""
     if value is None:
         return {
@@ -301,7 +326,7 @@ def range_fit(value, min_value, max_value, label):
             "scored": True,
             "ratio": 1.0,
             "status": "Match",
-            "detail": f"{label}: {format_metric(value)} fits fund range {format_range(min_value, max_value)}.",
+            "detail": f"{label}: {format_metric(value, currency_symbol)} fits fund range {format_range(min_value, max_value, currency_symbol)}.",
         }
 
     # Partial score if the opportunity is close to the target range.
@@ -313,7 +338,7 @@ def range_fit(value, min_value, max_value, label):
             "scored": True,
             "ratio": ratio,
             "status": status,
-            "detail": f"{label}: {format_metric(value)} is below fund range {format_range(min_value, max_value)}.",
+            "detail": f"{label}: {format_metric(value, currency_symbol)} is below fund range {format_range(min_value, max_value, currency_symbol)}.",
         }
 
     if max_value is not None and value > max_value:
@@ -324,7 +349,7 @@ def range_fit(value, min_value, max_value, label):
             "scored": True,
             "ratio": ratio,
             "status": status,
-            "detail": f"{label}: {format_metric(value)} is above fund range {format_range(min_value, max_value)}.",
+            "detail": f"{label}: {format_metric(value, currency_symbol)} is above fund range {format_range(min_value, max_value, currency_symbol)}.",
         }
 
     return {
@@ -747,7 +772,7 @@ def get_enrichment_text(enrichment, enrichment_columns, name, source_type=None):
 # Main scoring logic
 # -----------------------------
 
-def score_match(opportunity, fund, portfolio_companies, enrichment, columns, enrichment_columns):
+def score_match(opportunity, fund, portfolio_companies, enrichment, columns, enrichment_columns, currency_symbol="€"):
     fund_name = safe_get(fund, columns["fund_name"])
     opportunity_name = safe_get(opportunity, columns["opp_company"])
 
@@ -844,16 +869,16 @@ def score_match(opportunity, fund, portfolio_companies, enrichment, columns, enr
 
     # 1. EBITDA fit
     # Only EBITDA is scored. Revenue and ticket are reference-only.
-    ebitda_fit = range_fit(opp_ebitda, fund_ebitda_min, fund_ebitda_max, "EBITDA")
+    ebitda_fit = range_fit(opp_ebitda, fund_ebitda_min, fund_ebitda_max, "EBITDA", currency_symbol)
     add_weighted_score(score_data, weights["ebitda"], ebitda_fit)
 
     revenue_reference = (
-        f"Reference only — opportunity revenue {format_metric(opp_revenue)}; "
-        f"fund revenue range {format_range(fund_revenue_min, fund_revenue_max)}. Not used in score."
+        f"Reference only — opportunity revenue {format_metric(opp_revenue, currency_symbol)}; "
+        f"fund revenue range {format_range(fund_revenue_min, fund_revenue_max, currency_symbol)}. Not used in score."
     )
     ticket_reference = (
-        f"Reference only — opportunity ticket/EV {format_metric(opp_ticket)}; "
-        f"fund ticket range {format_range(fund_ticket_min, fund_ticket_max)}. Not used in score."
+        f"Reference only — opportunity ticket/EV {format_metric(opp_ticket, currency_symbol)}; "
+        f"fund ticket range {format_range(fund_ticket_min, fund_ticket_max, currency_symbol)}. Not used in score."
     )
 
     # 2. Sector fit
@@ -1895,11 +1920,12 @@ st.set_page_config(page_title="PE Matcher", layout="wide")
 
 st.title("PE Intelligence Copilot")
 st.write(
-    "Version 3.4: Expanded sector research and company-specific conversation intelligence. Opportunities and PE funds "
-    "can be read from Google Sheets and added directly from the website. Matching scores only sector/subsector fit, "
+    "Version 3.5: Added a dedicated U.S. private equity database and matching section. Opportunities and PE funds "
+    "can be read from Google Sheets and added directly from the website. Matching scores sector/subsector fit, "
     "EBITDA fit, and geography fit. Revenue and ticket size remain reference-only."
 )
 pe_funds, pe_funds_source, pe_funds_load_warning = load_pe_funds_database()
+us_pe_funds, us_pe_funds_source, us_pe_funds_load_warning = load_us_pe_funds_database()
 portfolio_companies = load_csv("portfolio_companies.csv")
 opportunities, opportunities_source, opportunities_load_warning = load_opportunities_database()
 website_enrichment = load_optional_csv("website_enrichment.csv")
@@ -1944,6 +1970,31 @@ columns = {
 }
 
 
+def build_fund_column_map(funds_df, base_columns):
+    """Reuse the opportunity/portfolio mapping while resolving fund fields for another worksheet."""
+    mapped = dict(base_columns)
+    mapped.update({
+        "fund_name": find_column(funds_df, ["fund_name", "fund", "name", "pe_fund"]),
+        "fund_sector": find_column(funds_df, ["primary_sectors", "sector_focus", "sector", "sectors", "preferred_sectors", "sector_focus_original"]),
+        "fund_secondary_sector": find_column(funds_df, ["secondary_sectors", "secondary_sector", "other_sectors"]),
+        "fund_business_model": find_column(funds_df, ["business_model_preference", "business_model", "model_preference"]),
+        "fund_preferred_characteristics": find_column(funds_df, ["preferred_characteristics", "characteristics", "preferences", "investment_criteria"]),
+        "fund_avoid": find_column(funds_df, ["avoid", "avoids", "negative_criteria", "not_interested"]),
+        "fund_geography": find_column(funds_df, ["geography", "country", "region", "regions"]),
+        "fund_transaction_type": find_column(funds_df, ["transaction_type", "deal_type", "investment_type"]),
+        "fund_notes": find_column(funds_df, ["notes", "comments", "description"]),
+        "fund_ebitda_min": find_column(funds_df, ["ebitda_min", "min_ebitda", "ebitda_minimum"]),
+        "fund_ebitda_max": find_column(funds_df, ["ebitda_max", "max_ebitda", "ebitda_maximum"]),
+        "fund_revenue_min": find_column(funds_df, ["revenue_min", "min_revenue", "sales_min", "turnover_min"]),
+        "fund_revenue_max": find_column(funds_df, ["revenue_max", "max_revenue", "sales_max", "turnover_max"]),
+        "fund_ticket_min": find_column(funds_df, ["ticket_min", "min_ticket", "equity_ticket_min", "investment_min"]),
+        "fund_ticket_max": find_column(funds_df, ["ticket_max", "max_ticket", "equity_ticket_max", "investment_max"]),
+    })
+    return mapped
+
+
+us_columns = build_fund_column_map(us_pe_funds, columns)
+
 enrichment_columns = {
     "source_type": find_column(website_enrichment, ["source_type"]),
     "name": find_column(website_enrichment, ["name"]),
@@ -1981,20 +2032,26 @@ if optional_missing:
 
 st.sidebar.header("Data Loaded")
 st.sidebar.write(f"PE Funds: {len(pe_funds)}")
+st.sidebar.write(f"U.S. PE Funds: {len(us_pe_funds)}")
 st.sidebar.write(f"Portfolio Companies: {len(portfolio_companies)}")
 st.sidebar.write(f"Opportunities: {len(opportunities)}")
 st.sidebar.write(f"Opportunities source: {opportunities_source}")
 st.sidebar.write(f"PE funds source: {pe_funds_source}")
+st.sidebar.write(f"U.S. PE funds source: {us_pe_funds_source}")
 if opportunities_load_warning:
     with st.sidebar.expander("Opportunities source warning"):
         st.write(opportunities_load_warning)
 if pe_funds_load_warning:
     with st.sidebar.expander("PE funds source warning"):
         st.write(pe_funds_load_warning)
+if us_pe_funds_load_warning:
+    with st.sidebar.expander("U.S. PE funds source warning"):
+        st.write(us_pe_funds_load_warning)
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab_us, tab3, tab4, tab5 = st.tabs([
     "Opportunity → PE Funds",
     "PE Fund → Opportunities",
+    "U.S. PE Section",
     "News Search",
     "Add Opportunity",
     "Add PE Fund"
@@ -2112,6 +2169,107 @@ with tab1:
                 file_name="pe_match_results.csv",
                 mime="text/csv",
             )
+
+
+# -----------------------------
+# Dedicated U.S. PE section
+# -----------------------------
+
+with tab_us:
+    st.header("U.S. Private Equity")
+    st.write(
+        "Match an opportunity only against the dedicated U.S. private equity universe. "
+        "The worksheet combines major global platforms with middle- and lower-middle-market firms. "
+        "Blank financial ranges mean the firm does not publish one standardized threshold."
+    )
+
+    if us_pe_funds.empty or us_columns.get("fund_name") is None or us_columns.get("fund_sector") is None:
+        st.warning("The U.S. PE database is empty or its required columns were not found.")
+    else:
+        us_view, us_match = st.tabs(["Browse U.S. PE Funds", "Opportunity → U.S. PE Funds"])
+
+        with us_view:
+            tier_filter = st.selectbox(
+                "Fund tier",
+                ["All", "Mega / large-cap", "Middle market", "Lower middle market"],
+                key="us_tier_filter",
+            )
+            displayed_us_funds = us_pe_funds.copy()
+            notes_col = us_columns.get("fund_notes")
+            if tier_filter != "All" and notes_col:
+                tier_terms = {
+                    "Mega / large-cap": "mega|large-cap|large cap",
+                    "Middle market": "middle market|upper middle|large middle",
+                    "Lower middle market": "lower middle|lower / core",
+                }
+                displayed_us_funds = displayed_us_funds[
+                    displayed_us_funds[notes_col].astype(str).str.contains(
+                        tier_terms[tier_filter], case=False, regex=True, na=False
+                    )
+                ]
+            st.dataframe(displayed_us_funds, use_container_width=True, hide_index=True)
+            st.download_button(
+                "Download U.S. PE database as CSV",
+                data=displayed_us_funds.to_csv(index=False).encode("utf-8-sig"),
+                file_name="us_pe_funds_database.csv",
+                mime="text/csv",
+            )
+
+        with us_match:
+            us_opportunity_names = opportunities[columns["opp_company"]].astype(str).tolist()
+            selected_us_opportunity_name = st.selectbox(
+                "Select an opportunity for the U.S. market",
+                us_opportunity_names,
+                key="us_opportunity_selector",
+            )
+            selected_us_opportunity = opportunities[
+                opportunities[columns["opp_company"]].astype(str) == selected_us_opportunity_name
+            ].iloc[0]
+
+            st.caption(
+                "Financial values are interpreted as USD millions in this section. "
+                "Use U.S. opportunities or convert the financial fields before relying on the score."
+            )
+
+            if st.button("Find Best U.S. PE Matches", key="find_us_pe_matches"):
+                us_results = []
+                for _, fund in us_pe_funds.iterrows():
+                    match = score_match(
+                        selected_us_opportunity,
+                        fund,
+                        portfolio_companies,
+                        website_enrichment,
+                        us_columns,
+                        enrichment_columns,
+                        currency_symbol="$",
+                    )
+                    us_results.append({
+                        "U.S. PE Fund": safe_get(fund, us_columns["fund_name"]),
+                        "Recommendation": match["recommendation"],
+                        "Match Score": match["score"],
+                        "Fit Score": match["fit_score"],
+                        "Data Completeness": match["data_completeness"],
+                        "EBITDA Fit": match["ebitda_fit"],
+                        "Sector Fit": match["sector_fit"],
+                        "Geography Fit": match["geography_fit"],
+                        "Revenue Reference": match["revenue_reference"],
+                        "Ticket Reference": match["ticket_reference"],
+                        "Primary Sectors": safe_get(fund, us_columns["fund_sector"]),
+                        "Transaction Type": safe_get(fund, us_columns["fund_transaction_type"]),
+                        "Notes": safe_get(fund, us_columns["fund_notes"]),
+                    })
+
+                us_results_df = pd.DataFrame(us_results).sort_values(
+                    ["Match Score", "Data Completeness", "Fit Score"], ascending=False
+                ).head(30)
+                st.subheader("Top U.S. PE Matches")
+                st.dataframe(us_results_df, use_container_width=True, hide_index=True)
+                st.download_button(
+                    "Download U.S. match results as CSV",
+                    data=us_results_df.to_csv(index=False).encode("utf-8-sig"),
+                    file_name="us_pe_match_results.csv",
+                    mime="text/csv",
+                )
 
 
 # -----------------------------
