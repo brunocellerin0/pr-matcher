@@ -224,6 +224,10 @@ def append_pe_fund_to_google_sheet(row_data):
     append_row_to_worksheet(get_pe_funds_worksheet(), row_data)
 
 
+def append_us_pe_fund_to_google_sheet(row_data):
+    append_row_to_worksheet(get_us_pe_funds_worksheet(), row_data)
+
+
 def find_column(df, possible_names):
     if df.empty:
         return None
@@ -1652,7 +1656,7 @@ def build_review_action(signal_type):
     return "Open source and review relevance manually."
 
 
-def find_database_mentions(title, summary, opportunities, pe_funds, columns):
+def find_database_mentions(title, summary, opportunities, pe_funds, columns, us_pe_funds=None, us_columns=None):
     text = normalize_text(f"{title} {summary}")
     mentions = []
 
@@ -1670,10 +1674,24 @@ def find_database_mentions(title, summary, opportunities, pe_funds, columns):
             if len(name_clean) >= 4 and normalize_text(name_clean) in text:
                 mentions.append(f"PE Fund: {name_clean}")
 
-    return "; ".join(mentions[:8]) if mentions else ""
+    us_fund_col = (us_columns or {}).get("fund_name")
+    if us_pe_funds is not None and us_fund_col and not us_pe_funds.empty:
+        for name in us_pe_funds[us_fund_col].astype(str).dropna().unique():
+            name_clean = str(name).strip()
+            if len(name_clean) >= 4 and normalize_text(name_clean) in text:
+                mentions.append(f"U.S. PE Fund: {name_clean}")
+
+    return "; ".join(dict.fromkeys(mentions)) if mentions else ""
 
 
-def add_english_review_columns(news_df, opportunities, pe_funds, columns):
+def add_english_review_columns(
+    news_df,
+    opportunities,
+    pe_funds,
+    columns,
+    us_pe_funds=None,
+    us_columns=None,
+):
     if news_df.empty:
         return news_df
 
@@ -1701,6 +1719,8 @@ def add_english_review_columns(news_df, opportunities, pe_funds, columns):
             opportunities,
             pe_funds,
             columns,
+            us_pe_funds=us_pe_funds,
+            us_columns=us_columns,
         ),
         axis=1,
     )
@@ -2186,7 +2206,11 @@ with tab_us:
     if us_pe_funds.empty or us_columns.get("fund_name") is None or us_columns.get("fund_sector") is None:
         st.warning("The U.S. PE database is empty or its required columns were not found.")
     else:
-        us_view, us_match = st.tabs(["Browse U.S. PE Funds", "Opportunity → U.S. PE Funds"])
+        us_view, us_match, us_add = st.tabs([
+            "Browse U.S. PE Funds",
+            "Opportunity → U.S. PE Funds",
+            "Add U.S. PE Fund",
+        ])
 
         with us_view:
             tier_filter = st.selectbox(
@@ -2270,6 +2294,195 @@ with tab_us:
                     file_name="us_pe_match_results.csv",
                     mime="text/csv",
                 )
+
+
+        with us_add:
+            st.subheader("Add a New U.S. PE Fund")
+            st.write(
+                "Add a fund directly to the live `us_pe_funds` Google Sheet. "
+                "EBITDA is used in matching; revenue and ticket/enterprise value remain reference-only."
+            )
+
+            if us_pe_funds_source != "Google Sheets":
+                st.warning(
+                    "The app is not currently reading U.S. PE funds from Google Sheets. "
+                    "Check the Google Sheet connection before submitting this form."
+                )
+
+            with st.form("add_us_pe_fund_form", clear_on_submit=True):
+                st.markdown("**Required information**")
+                us_f1, us_f2, us_f3 = st.columns(3)
+
+                with us_f1:
+                    us_new_fund_name = st.text_input("U.S. Fund Name *", key="us_new_fund_name")
+                    us_new_website = st.text_input("Website", key="us_new_website")
+                    us_new_geography = st.text_input(
+                        "Geography",
+                        value="United States; North America",
+                        key="us_new_geography",
+                    )
+
+                with us_f2:
+                    us_new_primary_sectors = st.text_area(
+                        "Primary Sectors *",
+                        height=90,
+                        key="us_new_primary_sectors",
+                    )
+                    us_new_secondary_sectors = st.text_area(
+                        "Secondary Sectors",
+                        height=90,
+                        key="us_new_secondary_sectors",
+                    )
+
+                with us_f3:
+                    us_new_ebitda_min = st.text_input(
+                        "EBITDA Min ($m)",
+                        placeholder="Example: 5",
+                        key="us_new_ebitda_min",
+                    )
+                    us_new_ebitda_max = st.text_input(
+                        "EBITDA Max ($m)",
+                        placeholder="Example: 25",
+                        key="us_new_ebitda_max",
+                    )
+                    us_new_transaction_type = st.text_input(
+                        "Transaction Type",
+                        key="us_new_transaction_type",
+                    )
+
+                st.markdown("**Reference ranges**")
+                us_r1, us_r2 = st.columns(2)
+                with us_r1:
+                    us_new_revenue_min = st.text_input("Revenue Min ($m)", key="us_new_revenue_min")
+                    us_new_revenue_max = st.text_input("Revenue Max ($m)", key="us_new_revenue_max")
+                with us_r2:
+                    us_new_ticket_min = st.text_input(
+                        "Ticket / EV Min ($m)",
+                        key="us_new_ticket_min",
+                    )
+                    us_new_ticket_max = st.text_input(
+                        "Ticket / EV Max ($m)",
+                        key="us_new_ticket_max",
+                    )
+
+                st.markdown("**Investment profile and research notes**")
+                us_a1, us_a2 = st.columns(2)
+                with us_a1:
+                    us_new_business_model = st.text_input(
+                        "Business Model Preference",
+                        key="us_new_business_model",
+                    )
+                    us_new_preferred = st.text_area(
+                        "Preferred Characteristics",
+                        height=100,
+                        key="us_new_preferred",
+                    )
+                    us_new_avoid = st.text_area(
+                        "Avoid / Negative Criteria",
+                        height=90,
+                        key="us_new_avoid",
+                    )
+                with us_a2:
+                    us_new_notes = st.text_area("Notes", height=100, key="us_new_notes")
+                    us_new_source_status = st.text_input(
+                        "Source Status",
+                        value="Added through app / needs review",
+                        key="us_new_source_status",
+                    )
+                    us_new_source_file = st.text_input(
+                        "Source URL or File",
+                        key="us_new_source_file",
+                    )
+                    us_new_last_update = st.text_input(
+                        "Last Update",
+                        placeholder="YYYY-MM-DD",
+                        key="us_new_last_update",
+                    )
+
+                submitted_us_pe = st.form_submit_button("Add U.S. PE fund to database")
+
+            if submitted_us_pe:
+                us_errors = []
+
+                if not us_new_fund_name.strip():
+                    us_errors.append("U.S. Fund Name is required.")
+                if not us_new_primary_sectors.strip():
+                    us_errors.append("Primary Sectors are required.")
+
+                us_numeric_fields = {
+                    "EBITDA Min": us_new_ebitda_min,
+                    "EBITDA Max": us_new_ebitda_max,
+                    "Revenue Min": us_new_revenue_min,
+                    "Revenue Max": us_new_revenue_max,
+                    "Ticket / EV Min": us_new_ticket_min,
+                    "Ticket / EV Max": us_new_ticket_max,
+                }
+                for label, value in us_numeric_fields.items():
+                    if value.strip() and parse_number(value) is None:
+                        us_errors.append(f"{label} must be a number, for example 5 or 5.5.")
+
+                us_range_pairs = [
+                    ("EBITDA", us_new_ebitda_min, us_new_ebitda_max),
+                    ("Revenue", us_new_revenue_min, us_new_revenue_max),
+                    ("Ticket / EV", us_new_ticket_min, us_new_ticket_max),
+                ]
+                for label, min_text, max_text in us_range_pairs:
+                    min_value = parse_number(min_text)
+                    max_value = parse_number(max_text)
+                    if min_value is not None and max_value is not None and min_value > max_value:
+                        us_errors.append(f"{label} minimum cannot be greater than its maximum.")
+
+                us_name_col = us_columns.get("fund_name")
+                if us_name_col and not us_pe_funds.empty:
+                    existing_names = {
+                        normalize_text(name)
+                        for name in us_pe_funds[us_name_col].astype(str).tolist()
+                        if str(name).strip()
+                    }
+                    if normalize_text(us_new_fund_name) in existing_names:
+                        us_errors.append("A U.S. PE fund with this name already exists.")
+
+                if us_errors:
+                    for error in us_errors:
+                        st.error(error)
+                else:
+                    us_new_row = {
+                        "fund_name": us_new_fund_name.strip(),
+                        "website": us_new_website.strip(),
+                        "ebitda_min": us_new_ebitda_min.strip(),
+                        "ebitda_max": us_new_ebitda_max.strip(),
+                        "ticket_min": us_new_ticket_min.strip(),
+                        "ticket_max": us_new_ticket_max.strip(),
+                        "revenue_min": us_new_revenue_min.strip(),
+                        "revenue_max": us_new_revenue_max.strip(),
+                        "primary_sectors": us_new_primary_sectors.strip(),
+                        "secondary_sectors": us_new_secondary_sectors.strip(),
+                        "business_model_preference": us_new_business_model.strip(),
+                        "preferred_characteristics": us_new_preferred.strip(),
+                        "avoid": us_new_avoid.strip(),
+                        "geography": us_new_geography.strip(),
+                        "transaction_type": us_new_transaction_type.strip(),
+                        "notes": us_new_notes.strip(),
+                        "last_update": us_new_last_update.strip(),
+                        "source_status": us_new_source_status.strip(),
+                        "source_file": us_new_source_file.strip(),
+                        "sector_focus_original": us_new_primary_sectors.strip(),
+                    }
+
+                    try:
+                        append_us_pe_fund_to_google_sheet(us_new_row)
+                        st.success(
+                            f"{us_new_fund_name.strip()} was added to the live U.S. PE database."
+                        )
+                        st.info(
+                            "Refresh the app to see the new fund in U.S. browsing, matching, and News Search."
+                        )
+                    except Exception as exc:
+                        st.error("The U.S. PE fund could not be added to Google Sheets.")
+                        st.write(str(exc))
+
+            with st.expander("Current U.S. PE fund columns"):
+                st.write(list(us_pe_funds.columns))
 
 
 # -----------------------------
@@ -2653,7 +2866,12 @@ with tab3:
         st.subheader("Conversation research target")
         context_source = st.radio(
             "Select the target from",
-            ["Opportunity database", "PE fund database", "Manual company"],
+            [
+                "Opportunity database",
+                "PE fund database",
+                "U.S. PE fund database",
+                "Manual company",
+            ],
             horizontal=True,
         )
 
@@ -2695,6 +2913,35 @@ with tab3:
                 ]),
                 "geography": safe_get(context_row, columns["fund_geography"]),
             }
+
+        elif context_source == "U.S. PE fund database":
+            if us_pe_funds.empty or us_columns.get("fund_name") is None:
+                st.warning("The U.S. PE fund database is empty or unavailable.")
+            else:
+                us_context_names = sorted(
+                    us_pe_funds[us_columns["fund_name"]].astype(str).tolist()
+                )
+                selected_us_context_name = st.selectbox(
+                    "U.S. PE fund",
+                    us_context_names,
+                    key="news_context_us_fund",
+                )
+                us_context_row = us_pe_funds[
+                    us_pe_funds[us_columns["fund_name"]].astype(str)
+                    == selected_us_context_name
+                ].iloc[0]
+                research_context = {
+                    "name": safe_get(us_context_row, us_columns["fund_name"]),
+                    "sector": safe_get(us_context_row, us_columns["fund_sector"]),
+                    "subsector": safe_get(us_context_row, us_columns["fund_secondary_sector"]),
+                    "description": " ".join([
+                        safe_get(us_context_row, us_columns["fund_business_model"]),
+                        safe_get(us_context_row, us_columns["fund_preferred_characteristics"]),
+                        safe_get(us_context_row, us_columns["fund_notes"]),
+                    ]),
+                    "geography": safe_get(us_context_row, us_columns["fund_geography"])
+                    or "United States",
+                }
 
         else:
             manual1, manual2, manual3 = st.columns(3)
@@ -2781,6 +3028,8 @@ with tab3:
                 opportunities=opportunities,
                 pe_funds=pe_funds,
                 columns=columns,
+                us_pe_funds=us_pe_funds,
+                us_columns=us_columns,
             )
 
             market_options = sorted(news_df["Market"].dropna().unique().tolist())
